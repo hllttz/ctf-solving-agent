@@ -1,0 +1,172 @@
+package tools
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/schema"
+)
+
+var httpClient = &http.Client{
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return fmt.Errorf("too many redirects")
+		}
+		return nil
+	},
+}
+
+var blockedCIDRs = []string{
+	"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+}
+
+func isBlocked(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		addrs, err := net.LookupIP(host)
+		if err != nil || len(addrs) == 0 {
+			return false
+		}
+		ip = addrs[0]
+	}
+	for _, cidr := range blockedCIDRs {
+		_, block, _ := net.ParseCIDR(cidr)
+		if block != nil && block.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// WebFetchTool performs HTTP GET requests.
+type WebFetchTool struct{}
+
+func NewWebFetchTool() *WebFetchTool { return &WebFetchTool{} }
+
+func (t *WebFetchTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "web_fetch",
+		Desc: "Fetch a URL. Internal/private IPs are blocked for security.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"url": {Type: schema.String, Desc: "URL to fetch", Required: true},
+		}),
+	}, nil
+}
+
+func (t *WebFetchTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
+	var args struct{ URL string `json:"url"` }
+	if err := unmarshalArgs(argsJSON, &args); err != nil {
+		return "", fmt.Errorf("web_fetch: %w", err)
+	}
+
+	u := args.URL
+	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		u = "http://" + u
+	}
+
+	host := u
+	if after, ok := strings.CutPrefix(u, "http://"); ok {
+		host = after
+	} else if after, ok := strings.CutPrefix(u, "https://"); ok {
+		host = after
+	}
+	if idx := strings.Index(host, "/"); idx >= 0 {
+		host = host[:idx]
+	}
+	if idx := strings.Index(host, ":"); idx >= 0 {
+		host = host[:idx]
+	}
+
+	if isBlocked(host) {
+		return "", fmt.Errorf("blocked: %s is an internal/private address", host)
+	}
+
+	resp, err := httpClient.Get(u)
+	if err != nil {
+		return "", fmt.Errorf("fetch error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 500*1024))
+	const maxLen = 24000
+	if len(body) > maxLen {
+		body = body[:maxLen]
+	}
+	return fmt.Sprintf("Status: %d\n\n%s", resp.StatusCode, string(body)), nil
+}
+
+// WebhookCreateTool creates a webhook.site token for XSS/SSRF callbacks.
+type WebhookCreateTool struct{}
+
+func NewWebhookCreateTool() *WebhookCreateTool { return &WebhookCreateTool{} }
+
+func (t *WebhookCreateTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "webhook_create",
+		Desc: "Create a webhook.site token for capturing HTTP callbacks (XSS, SSRF).",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
+	}, nil
+}
+
+func (t *WebhookCreateTool) InvokableRun(_ context.Context, _ string, _ ...tool.Option) (string, error) {
+	resp, err := httpClient.Post("https://webhook.site/token", "application/json", nil)
+	if err != nil {
+		return "", fmt.Errorf("webhook_create: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		UUID string `json:"uuid"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err := unmarshalArgs(string(body), &result); err != nil {
+		return "", fmt.Errorf("webhook_create parse: %w (body: %s)", err, string(body))
+	}
+
+	return fmt.Sprintf("Webhook created: https://webhook.site/%s\nUse webhook_get_requests with token=%s to retrieve captured requests.",
+		result.UUID, result.UUID), nil
+}
+
+// WebhookGetRequestsTool retrieves captured webhook requests.
+type WebhookGetRequestsTool struct{}
+
+func NewWebhookGetRequestsTool() *WebhookGetRequestsTool { return &WebhookGetRequestsTool{} }
+
+func (t *WebhookGetRequestsTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "webhook_get_requests",
+		Desc: "Retrieve captured requests for a webhook.site token.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"token": {Type: schema.String, Desc: "The webhook.site token/UUID", Required: true},
+		}),
+	}, nil
+}
+
+func (t *WebhookGetRequestsTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
+	var args struct{ Token string `json:"token"` }
+	if err := unmarshalArgs(argsJSON, &args); err != nil {
+		return "", fmt.Errorf("webhook_get_requests: %w", err)
+	}
+
+	url := "https://webhook.site/token/" + args.Token + "/requests?sorting=newest"
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("webhook_get_requests: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
+	const maxLen = 24000
+	if len(body) > maxLen {
+		body = body[:maxLen]
+	}
+	return string(body), nil
+}

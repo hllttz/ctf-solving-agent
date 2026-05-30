@@ -1,0 +1,227 @@
+package prompt
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Meta holds challenge metadata parsed from metadata.yml.
+type Meta struct {
+	Name        string   `yaml:"name"`
+	Category    string   `yaml:"category"`
+	Description string   `yaml:"description"`
+	Points      int      `yaml:"points"`
+	Tags        []string `yaml:"tags"`
+	Arch        string   `yaml:"arch"`
+	Host        string   `yaml:"host"`
+	Port        int      `yaml:"port"`
+	ServiceType string   `yaml:"service_type"`
+	Files       []string `yaml:"files"`
+	Hints       []Hint   `yaml:"hints"`
+}
+
+type Hint struct {
+	Text string `yaml:"text"`
+	Cost int    `yaml:"cost"`
+}
+
+// LoadMeta reads and parses a challenge metadata.yml file.
+func LoadMeta(path string) (*Meta, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read metadata: %w", err)
+	}
+	var meta Meta
+	if err := yaml.Unmarshal(data, &meta); err != nil {
+		return nil, fmt.Errorf("parse metadata: %w", err)
+	}
+	return &meta, nil
+}
+
+// Build generates the system prompt for a challenge solver.
+func Build(meta *Meta, distfilesPath, workspacePath string) string {
+	var b strings.Builder
+
+	// Header
+	b.WriteString("You are an autonomous CTF (Capture The Flag) solving agent.\n")
+	b.WriteString("Your goal is to find the FLAG for the challenge described below.\n\n")
+
+	if meta.Host != "" && meta.Port > 0 {
+		conn := connectionCommand(meta)
+		b.WriteString("> FIRST ACTION REQUIRED: Your very first tool call MUST connect to the service.\n")
+		b.WriteString(fmt.Sprintf("> Run: `%s`\n", conn))
+		b.WriteString("> Do NOT explore the sandbox filesystem first. The flag is on the service, not in the container.\n\n")
+	}
+
+	// Challenge info
+	b.WriteString("## Challenge\n")
+	b.WriteString(fmt.Sprintf("Name: %s\n", meta.Name))
+	b.WriteString(fmt.Sprintf("Category: %s\n", meta.Category))
+	if meta.Points > 0 {
+		b.WriteString(fmt.Sprintf("Points: %d\n", meta.Points))
+	}
+	if len(meta.Tags) > 0 {
+		b.WriteString(fmt.Sprintf("Tags: %s\n", strings.Join(meta.Tags, ", ")))
+	}
+	if meta.Arch != "" {
+		b.WriteString(fmt.Sprintf("Architecture: %s\n", meta.Arch))
+	}
+	b.WriteString("\n")
+
+	// Description
+	if meta.Description != "" {
+		b.WriteString("## Description\n")
+		b.WriteString(meta.Description + "\n\n")
+	}
+
+	// Connection info
+	if meta.Host != "" && meta.Port > 0 {
+		b.WriteString("## Connection\n")
+		b.WriteString(fmt.Sprintf("Host: %s\n", meta.Host))
+		b.WriteString(fmt.Sprintf("Port: %d\n", meta.Port))
+		if meta.ServiceType == "web" {
+			b.WriteString(fmt.Sprintf("Access via: curl http://%s:%d/\n", meta.Host, meta.Port))
+		} else {
+			b.WriteString(fmt.Sprintf("Connect via: nc %s %d\n", meta.Host, meta.Port))
+		}
+		// Rewrite localhost -> host.docker.internal for Docker
+		if meta.Host == "localhost" || meta.Host == "127.0.0.1" {
+			b.WriteString("(Note: use host.docker.internal instead of localhost in the sandbox)\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// Distfiles
+	if len(meta.Files) > 0 {
+		b.WriteString("## Provided Files (in /challenge/distfiles/)\n")
+		for _, f := range meta.Files {
+			b.WriteString(fmt.Sprintf("- %s\n", f))
+			if hint := fileHint(f); hint != "" {
+				b.WriteString(fmt.Sprintf("  Hint: %s\n", hint))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Hints
+	if len(meta.Hints) > 0 {
+		b.WriteString("## Hints\n")
+		for _, h := range meta.Hints {
+			b.WriteString(fmt.Sprintf("- %s\n", h.Text))
+		}
+		b.WriteString("\n")
+	}
+
+	// Category-specific guidance
+	b.WriteString(categoryGuidance(meta.Category))
+
+	// Instructions
+	b.WriteString("## Instructions\n")
+	if meta.Host != "" && meta.Port > 0 {
+		b.WriteString("1. Connect to the service now.\n")
+	} else {
+		b.WriteString("1. Inspect distfiles now.\n")
+	}
+	b.WriteString("2. Use the bash tool to run commands in the sandbox.\n")
+	b.WriteString("3. Use the available tools (bash, read_file, write_file, list_files, view_image, web_fetch, webhook_create, webhook_get_requests, check_findings).\n")
+	b.WriteString("4. Be persistent and creative. Try multiple approaches.\n")
+	b.WriteString("5. The sandbox has extensive CTF tools installed - check /tools.txt for reference.\n")
+	b.WriteString("6. When you find the flag, include it in your response clearly.\n")
+	b.WriteString("7. The flag format is typically a string like CTF{...} or flag{...}.\n")
+
+	return b.String()
+}
+
+func connectionCommand(meta *Meta) string {
+	host := meta.Host
+	if host == "localhost" || host == "127.0.0.1" {
+		host = "host.docker.internal"
+	}
+	if meta.ServiceType == "web" {
+		return fmt.Sprintf("curl http://%s:%d/", host, meta.Port)
+	}
+	return fmt.Sprintf("nc %s %d", host, meta.Port)
+}
+
+func fileHint(filename string) string {
+	lower := strings.ToLower(filename)
+	switch {
+	case strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") ||
+		strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") ||
+		strings.HasSuffix(lower, ".bmp"):
+		return "Image file - use view_image to inspect"
+	case strings.HasSuffix(lower, ".txt") || strings.HasSuffix(lower, ".md"):
+		return "Text file - use read_file to inspect"
+	case strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz"):
+		return "Archive - use bash 'unzip' or 'tar xzf' to extract"
+	case strings.HasSuffix(lower, ".pcap") || strings.HasSuffix(lower, ".pcapng"):
+		return "Packet capture - use tshark or wireshark (tshark) to analyze"
+	case strings.HasSuffix(lower, ".py") || strings.HasSuffix(lower, ".pyc"):
+		return "Python file - use read_file or decompyle3 to inspect"
+	default:
+		return ""
+	}
+}
+
+func categoryGuidance(category string) string {
+	switch strings.ToLower(category) {
+	case "pwn", "binary exploitation":
+		return `## Binary Exploitation Guidance
+- Use file, checksec to analyze the binary
+- Use radare2 or gdb for reverse engineering
+- Use pwntools for exploit development
+- Common techniques: buffer overflow, ROP, format string, heap exploitation
+- The binary may have mitigations (NX, ASLR, PIE, Canary, RELRO)
+
+`
+	case "rev", "reverse engineering":
+		return `## Reverse Engineering Guidance
+- Use file, strings, objdump for initial analysis
+- Use radare2, ghidra (pyghidra), or gdb for deep analysis
+- Use angr for symbolic execution
+- Look for encoded/encrypted strings and constants
+- Python .pyc files: use decompyle3 or pycdc
+
+`
+	case "crypto", "cryptography":
+		return `## Cryptography Guidance
+- Use RsaCtfTool for RSA challenges
+- Use SageMath for mathematical operations
+- Use CADO-NFS for factorization
+- Use flatter for LLL lattice reduction
+- Look for common attacks: padding oracle, weak primes, etc.
+
+`
+	case "forensics", "forensic":
+		return `## Forensics Guidance
+- Use binwalk, foremost for file carving
+- Use steghide, stegseek, zsteg for steganography
+- Use exiftool for metadata analysis
+- Use volatility3 for memory forensics
+- Use tesseract for OCR
+
+`
+	case "web", "web exploitation":
+		return `## Web Exploitation Guidance
+- Use curl for HTTP requests
+- Look for XSS, SQLi, SSRF, path traversal
+- Use webhook_create + webhook_get_requests for callbacks
+- Check source code, cookies, headers, and robots.txt
+- Test for command injection and file inclusion
+
+`
+	case "misc", "miscellaneous":
+		return `## Miscellaneous Guidance
+- Think creatively - misc challenges often combine multiple techniques
+- Inspect all files thoroughly
+- Look for hidden data in files, encodings, and protocols
+
+`
+	default:
+		return ""
+	}
+}
