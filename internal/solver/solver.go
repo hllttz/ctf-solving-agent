@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -333,6 +334,23 @@ func (s *Solver) traceEvent(eventType string, step int, tool string, data map[st
 		return
 	}
 	s.tracer.LogEvent(eventType, s.agentName, s.challenge, step, tool, data)
+
+	switch eventType {
+	case "start":
+		log.Printf("[%s/%s] start provider=%v model=%v vision=%v", s.challenge, s.agentName, data["provider"], data["model_id"], data["supports_vision"])
+	case "bump":
+		log.Printf("[%s/%s] bump step=%d", s.challenge, s.agentName, step)
+	case "tool_call":
+		log.Printf("[%s/%s] step %d tool=%s", s.challenge, s.agentName, step, tool)
+	case "tool_error":
+		log.Printf("[%s/%s] step %d tool=%s error=%v", s.challenge, s.agentName, step, tool, data["error"])
+	case "model_response":
+		log.Printf("[%s/%s] step %d model responded", s.challenge, s.agentName, step)
+	case "finish":
+		log.Printf("[%s/%s] finish status=%v flag=%v method=%v steps=%d", s.challenge, s.agentName, data["status"], data["flag"], data["method"], step)
+	case "error":
+		log.Printf("[%s/%s] error=%v", s.challenge, s.agentName, data["error"])
+	}
 }
 
 func (s *Solver) tracePath() string {

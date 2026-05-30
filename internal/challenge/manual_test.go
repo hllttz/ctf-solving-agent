@@ -27,6 +27,9 @@ func TestCreateManualCopiesFilesAndWritesMetadata(t *testing.T) {
 	if got, want := filepath.Base(out.Dir), "baby-pwn"; got != want {
 		t.Fatalf("dir basename = %q, want %q", got, want)
 	}
+	if !filepath.IsAbs(out.Dir) {
+		t.Fatalf("expected absolute dir, got %q", out.Dir)
+	}
 	if _, err := os.Stat(filepath.Join(out.Dir, "distfiles", "chall.zip")); err != nil {
 		t.Fatalf("copied file missing: %v", err)
 	}

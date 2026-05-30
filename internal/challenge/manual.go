@@ -43,7 +43,11 @@ func CreateManual(opts ManualOptions) (*ManualResult, error) {
 		root = "challenges"
 	}
 	challengeDir := filepath.Join(root, slug)
-	distDir := filepath.Join(challengeDir, "distfiles")
+	absChallengeDir, err := filepath.Abs(challengeDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve challenge dir: %w", err)
+	}
+	distDir := filepath.Join(absChallengeDir, "distfiles")
 	if err := os.MkdirAll(distDir, 0755); err != nil {
 		return nil, fmt.Errorf("create distfiles dir: %w", err)
 	}
@@ -72,11 +76,11 @@ func CreateManual(opts ManualOptions) (*ManualResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal metadata: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(challengeDir, "metadata.yml"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(absChallengeDir, "metadata.yml"), data, 0644); err != nil {
 		return nil, fmt.Errorf("write metadata: %w", err)
 	}
 
-	return &ManualResult{Dir: challengeDir, Name: name, Files: copied}, nil
+	return &ManualResult{Dir: absChallengeDir, Name: name, Files: copied}, nil
 }
 
 func copyFileToDir(src, dstDir string) (string, error) {

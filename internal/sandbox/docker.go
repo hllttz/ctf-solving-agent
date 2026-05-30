@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,9 +50,13 @@ func NewDockerWithOptions(ctx context.Context, opts DockerOptions) (Sandbox, err
 		memoryLimit = "16g"
 	}
 
-	workspaceHost := opts.ChallengeDir + "/workspace"
-	distfilesHost := opts.ChallengeDir + "/distfiles"
-	metadataHost := opts.ChallengeDir + "/metadata.yml"
+	challengeDir, err := filepath.Abs(opts.ChallengeDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve challenge dir: %w", err)
+	}
+	workspaceHost := filepath.Join(challengeDir, "workspace")
+	distfilesHost := filepath.Join(challengeDir, "distfiles")
+	metadataHost := filepath.Join(challengeDir, "metadata.yml")
 
 	os.MkdirAll(workspaceHost, 0755)
 
@@ -78,7 +83,7 @@ func NewDockerWithOptions(ctx context.Context, opts DockerOptions) (Sandbox, err
 		containerName: opts.Name,
 		workspace:     workspace,
 		distfiles:     distfiles,
-		challengeDir:  opts.ChallengeDir,
+		challengeDir:  challengeDir,
 	}, nil
 }
 
