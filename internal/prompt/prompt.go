@@ -82,15 +82,12 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 		b.WriteString("## Connection\n")
 		b.WriteString(fmt.Sprintf("Host: %s\n", meta.Host))
 		b.WriteString(fmt.Sprintf("Port: %d\n", meta.Port))
-		if meta.ServiceType == "web" {
-			b.WriteString(fmt.Sprintf("Access via: curl http://%s:%d/\n", meta.Host, meta.Port))
-		} else {
-			b.WriteString(fmt.Sprintf("Connect via: nc %s %d\n", meta.Host, meta.Port))
-		}
+		b.WriteString(fmt.Sprintf("Use from sandbox: %s\n", connectionCommand(meta)))
 		// Rewrite localhost -> host.docker.internal for Docker
 		if meta.Host == "localhost" || meta.Host == "127.0.0.1" {
 			b.WriteString("(Note: use host.docker.internal instead of localhost in the sandbox)\n")
 		}
+		b.WriteString(connectionGuidance(meta))
 		b.WriteString("\n")
 	}
 
@@ -117,6 +114,7 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 
 	// Category-specific guidance
 	b.WriteString(categoryGuidance(meta.Category))
+	b.WriteString(generalAnalysisGuidance(meta))
 
 	// Instructions
 	b.WriteString("## Instructions\n")
@@ -166,6 +164,87 @@ func fileHint(filename string) string {
 	default:
 		return ""
 	}
+}
+
+func connectionGuidance(meta *Meta) string {
+	conn := connectionCommand(meta)
+	if meta.ServiceType == "web" {
+		return `This is a web service. Start with:
+- bash: curl -i ` + connURL(meta) + `/
+- web_fetch for simple GET/POST requests when no cookies/session are needed.
+- Prefer bash+curl or Python requests for cookies, sessions, redirects, and repeated fuzzing.
+`
+	}
+	return `This is a TCP service. Each bash call is a fresh process. For multi-line interaction, use a heredoc:
+` + conn + ` <<'EOF'
+command1
+command2
+EOF
+For stateful interaction, write a Python socket or pwntools script in /workspace.
+`
+}
+
+func connURL(meta *Meta) string {
+	host := meta.Host
+	if host == "localhost" || host == "127.0.0.1" {
+		host = "host.docker.internal"
+	}
+	return fmt.Sprintf("http://%s:%d", host, meta.Port)
+}
+
+func generalAnalysisGuidance(meta *Meta) string {
+	var b strings.Builder
+	if hasImage(meta.Files) {
+		b.WriteString(`## Image Guidance
+- Call view_image first for image files.
+- If view_image reports corruption, inspect and repair magic bytes with xxd/file before retrying.
+- Then use exiftool, strings, binwalk, zsteg, steghide/stegseek as appropriate.
+
+`)
+	}
+	if shouldIncludeBinaryGuidance(meta) {
+		b.WriteString(`## Binary Analysis Tools
+- pyghidra is available for decompilation. Example:
+  python3 - <<'PY'
+  import pyghidra
+  with pyghidra.open_program('/challenge/distfiles/binary') as flat_api:
+      program = flat_api.currentProgram
+      print(program.getListing())
+  PY
+- Also try file, checksec, strings, objdump, r2, gdb, angr, capstone.
+
+`)
+	}
+	return b.String()
+}
+
+func hasImage(files []string) bool {
+	for _, name := range files {
+		lower := strings.ToLower(name)
+		if strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") ||
+			strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") ||
+			strings.HasSuffix(lower, ".bmp") || strings.HasSuffix(lower, ".webp") ||
+			strings.HasSuffix(lower, ".tiff") || strings.HasSuffix(lower, ".tif") {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldIncludeBinaryGuidance(meta *Meta) bool {
+	cat := strings.ToLower(meta.Category)
+	if cat == "" || strings.Contains(cat, "pwn") || strings.Contains(cat, "rev") ||
+		strings.Contains(cat, "reverse") || strings.Contains(cat, "binary") || strings.Contains(cat, "misc") {
+		return true
+	}
+	for _, name := range meta.Files {
+		lower := strings.ToLower(name)
+		if strings.HasSuffix(lower, ".elf") || strings.HasSuffix(lower, ".so") ||
+			strings.HasSuffix(lower, ".exe") || strings.HasSuffix(lower, ".bin") {
+			return true
+		}
+	}
+	return false
 }
 
 func categoryGuidance(category string) string {
