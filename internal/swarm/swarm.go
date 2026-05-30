@@ -22,6 +22,7 @@ type Swarm struct {
 	apiKeys       map[string]string
 	sandboxImage  string
 	memoryLimit   string
+	strategyHint  string
 
 	bus *bus.MessageBus
 
@@ -42,6 +43,10 @@ func New(name, dir string, modelSpecs []string, apiKeys map[string]string, image
 }
 
 func NewWithOptions(name, dir string, modelSpecs []string, apiKeys map[string]string, image, memoryLimit string) *Swarm {
+	return NewWithStrategy(name, dir, modelSpecs, apiKeys, image, memoryLimit, "")
+}
+
+func NewWithStrategy(name, dir string, modelSpecs []string, apiKeys map[string]string, image, memoryLimit, strategyHint string) *Swarm {
 	return &Swarm{
 		challengeName: name,
 		challengeDir:  dir,
@@ -49,6 +54,7 @@ func NewWithOptions(name, dir string, modelSpecs []string, apiKeys map[string]st
 		apiKeys:       apiKeys,
 		sandboxImage:  image,
 		memoryLimit:   memoryLimit,
+		strategyHint:  strategyHint,
 		bus:           bus.New(),
 		done:          make(chan struct{}),
 	}
@@ -58,6 +64,10 @@ func NewWithOptions(name, dir string, modelSpecs []string, apiKeys map[string]st
 func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	if strings.TrimSpace(s.strategyHint) != "" {
+		s.bus.Broadcast(s.strategyHint)
+	}
 
 	// Create sandboxes and solvers
 	var instances []solverInst

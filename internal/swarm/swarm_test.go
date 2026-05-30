@@ -29,3 +29,20 @@ func TestGatherSiblingInsightsEmpty(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestRunBroadcastsStrategyHintBeforeSolvers(t *testing.T) {
+	sw := NewWithStrategy("chal", "/tmp/chal", nil, nil, "image", "16g", "prioritize service")
+
+	result := sw.Run(t.Context(), "prompt")
+	if result.Status == 0 {
+		t.Fatalf("unexpected running result")
+	}
+
+	items := sw.bus.All()
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].Author != "coordinator" || items[0].Content != "prioritize service" {
+		t.Fatalf("unexpected broadcast: %#v", items[0])
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/verialabs/ctf-agent/internal/prompt"
@@ -134,7 +135,7 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	}
 
 	log.Printf("[coordinator] Starting swarm for %s (%s)", challenge, meta.Category)
-	sw := swarm.NewWithOptions(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage, c.memoryLimit)
+	sw := swarm.NewWithStrategy(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage, c.memoryLimit, initialStrategy(meta))
 	c.mu.Lock()
 	c.swarms[challenge] = sw
 	c.mu.Unlock()
@@ -142,6 +143,29 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	result := sw.Run(ctx, sysPrompt)
 	log.Printf("[coordinator] Challenge %s: status=%d flag=%s", challenge, result.Status, result.Flag)
 	return result
+}
+
+func initialStrategy(meta *prompt.Meta) string {
+	if meta == nil {
+		return ""
+	}
+	var parts []string
+	if meta.Host != "" && meta.Port > 0 {
+		parts = append(parts, "Coordinator: prioritize the live service first; verify behavior remotely before spending time on local files.")
+	}
+	switch strings.ToLower(meta.Category) {
+	case "web", "web exploitation":
+		parts = append(parts, "Coordinator: enumerate HTTP surface early: headers, cookies, source, robots.txt, obvious params, then test injection/path traversal/SSRF paths.")
+	case "pwn", "binary exploitation":
+		parts = append(parts, "Coordinator: capture service I/O, run file/checksec, then build a minimal pwntools harness before deeper reversing.")
+	case "rev", "reverse engineering":
+		parts = append(parts, "Coordinator: start with file/strings, identify validation logic, and use pyghidra/r2 for focused decompilation.")
+	case "crypto", "cryptography":
+		parts = append(parts, "Coordinator: identify primitives and parameters first; look for weak randomness, reused nonce, small factors, padding oracles, or encoding layers.")
+	case "forensics", "forensic":
+		parts = append(parts, "Coordinator: preserve originals, inspect metadata/strings/binwalk first, then carve or repair files only in /workspace.")
+	}
+	return strings.Join(parts, "\n")
 }
 
 // Summary prints a results summary.

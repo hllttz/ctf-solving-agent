@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const CoordinatorAuthor = "coordinator"
+
 // Finding represents a discovery shared by a solver.
 type Finding struct {
 	Author    string
@@ -37,6 +39,11 @@ func (b *MessageBus) Post(author, content string) {
 		Content:   content,
 		Timestamp: time.Now(),
 	})
+}
+
+// Broadcast posts a coordinator-level strategy message to all solvers.
+func (b *MessageBus) Broadcast(content string) {
+	b.Post(CoordinatorAuthor, content)
 }
 
 // Check returns findings after the given cursor position.

@@ -26,3 +26,22 @@ func TestCheckForSkipsOwnFindingsAndAdvancesCursor(t *testing.T) {
 		t.Fatalf("len(items) after no new items = %d, want 0", len(items))
 	}
 }
+
+func TestBroadcastPostsCoordinatorMessage(t *testing.T) {
+	b := New()
+	b.Broadcast("try another angle")
+
+	items, next := b.CheckFor("model-a", 0)
+	if next != 1 {
+		t.Fatalf("next = %d, want 1", next)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].Author != CoordinatorAuthor {
+		t.Fatalf("author = %q", items[0].Author)
+	}
+	if items[0].Content != "try another angle" {
+		t.Fatalf("content = %q", items[0].Content)
+	}
+}

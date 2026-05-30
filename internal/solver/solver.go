@@ -294,7 +294,7 @@ func (s *Solver) checkFindingsText() string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Findings from other agents:\n")
+	b.WriteString("New guidance and findings:\n")
 	for _, item := range items {
 		b.WriteString(fmt.Sprintf("[%s] %s\n", item.Author, item.Content))
 	}
