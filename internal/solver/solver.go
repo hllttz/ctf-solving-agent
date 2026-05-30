@@ -59,6 +59,7 @@ type Solver struct {
 	modelInfo models.SpecInfo
 	messages  []*schema.Message
 	tracer    *trace.Tracer
+	reporter  *sandboxTools.FlagReporter
 	stepCount int
 	mu        sync.Mutex
 }
@@ -87,6 +88,7 @@ func NewWithNameForChallenge(m model.ToolCallingChatModel, sb sandbox.Sandbox, b
 		agentName: agentName,
 		modelInfo: models.InspectSpec(agentName),
 		tracer:    tracer,
+		reporter:  sandboxTools.NewFlagReporter(),
 	}
 }
 
@@ -161,8 +163,20 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	}
 	_ = startTime
 
+	if report, ok := s.reporter.Latest(); ok {
+		result.Status = FlagFound
+		result.Flag = report.Flag
+		result.Method = report.Method
+		if report.Confidence != "" {
+			result.Findings = append(result.Findings, "confidence: "+report.Confidence)
+		}
+		if report.Evidence != "" {
+			result.Findings = append(result.Findings, "evidence: "+report.Evidence)
+		}
+	}
+
 	// Extract flag if present in the output
-	if flag, method := extractFlagResult(output.Content); flag != "" {
+	if flag, method := extractFlagResult(output.Content); flag != "" && result.Status != FlagFound {
 		result.Status = FlagFound
 		result.Flag = flag
 		result.Method = method
@@ -337,7 +351,9 @@ func (s *Solver) buildTools() []tool.BaseTool {
 		sandboxTools.NewWebFetchTool(),
 		sandboxTools.NewWebhookCreateTool(),
 		sandboxTools.NewWebhookGetRequestsTool(),
+		sandboxTools.NewReportFlagTool(s.reporter),
 		sandboxTools.NewPostFindingTool(s.bus, s.agentName),
+		sandboxTools.NewNotifyCoordinatorTool(s.bus, s.agentName),
 		sandboxTools.NewCheckFindingsToolFor(s.bus, &s.busCursor, s.agentName),
 	}
 	if s.modelInfo.SupportsVision {

@@ -1,0 +1,32 @@
+CTF sandbox tool reference
+==========================
+
+Core
+- bash, python3, curl, wget, git, file, strings, xxd, jq, rg, nc, socat
+- /challenge/distfiles is read-only challenge input
+- /workspace is writable scratch space
+- /challenge/metadata.yml is mounted when available
+
+Binary / pwn
+- file, checksec via pwntools, readelf, objdump, nm, ldd
+- gdb, gdbserver, strace, ltrace, patchelf
+- pwntools, ROPgadget, one_gadget, angr, capstone, unicorn, keystone
+- radare2/r2 for disassembly and reversing
+
+Reverse engineering
+- strings, xxd, objdump, r2, gdb
+- pyghidra is available from Python
+- decompyle3 and uncompyle6 for Python bytecode
+
+Crypto
+- python3 with pycryptodome, z3-solver, gmpy2, sympy, numpy, scipy
+- openssl, hashcat, john
+
+Forensics / stego
+- binwalk, exiftool, foremost, sleuthkit tools, tshark, tcpdump
+- steghide, zsteg, ImageMagick, tesseract OCR
+- ffmpeg and sox for audio/video
+
+Web
+- curl, Python requests, BeautifulSoup, lxml, flask, nmap
+- Use curl or Python scripts for cookies, sessions, redirects, and fuzzing

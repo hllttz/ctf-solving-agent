@@ -10,22 +10,25 @@ import (
 
 // Meta holds challenge metadata parsed from metadata.yml.
 type Meta struct {
-	Name        string   `yaml:"name"`
-	Category    string   `yaml:"category"`
-	Description string   `yaml:"description"`
-	Points      int      `yaml:"points"`
-	Tags        []string `yaml:"tags"`
-	Arch        string   `yaml:"arch"`
-	Host        string   `yaml:"host"`
-	Port        int      `yaml:"port"`
-	ServiceType string   `yaml:"service_type"`
-	Files       []string `yaml:"files"`
-	Hints       []Hint   `yaml:"hints"`
+	Name           string   `yaml:"name"`
+	Category       string   `yaml:"category"`
+	Description    string   `yaml:"description"`
+	Points         int      `yaml:"points"`
+	Value          int      `yaml:"value"`
+	Tags           []string `yaml:"tags"`
+	Arch           string   `yaml:"arch"`
+	Host           string   `yaml:"host"`
+	Port           int      `yaml:"port"`
+	ServiceType    string   `yaml:"service_type"`
+	ConnectionInfo string   `yaml:"connection_info"`
+	Files          []string `yaml:"files"`
+	Hints          []Hint   `yaml:"hints"`
 }
 
 type Hint struct {
-	Text string `yaml:"text"`
-	Cost int    `yaml:"cost"`
+	Text    string `yaml:"text"`
+	Content string `yaml:"content"`
+	Cost    int    `yaml:"cost"`
 }
 
 // LoadMeta reads and parses a challenge metadata.yml file.
@@ -49,7 +52,7 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	b.WriteString("You are an autonomous CTF (Capture The Flag) solving agent.\n")
 	b.WriteString("Your goal is to find the FLAG for the challenge described below.\n\n")
 
-	if meta.Host != "" && meta.Port > 0 {
+	if hasConnection(meta) {
 		conn := connectionCommand(meta)
 		b.WriteString("> FIRST ACTION REQUIRED: Your very first tool call MUST connect to the service.\n")
 		b.WriteString(fmt.Sprintf("> Run: `%s`\n", conn))
@@ -60,8 +63,8 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	b.WriteString("## Challenge\n")
 	b.WriteString(fmt.Sprintf("Name: %s\n", meta.Name))
 	b.WriteString(fmt.Sprintf("Category: %s\n", meta.Category))
-	if meta.Points > 0 {
-		b.WriteString(fmt.Sprintf("Points: %d\n", meta.Points))
+	if points := metaPoints(meta); points > 0 {
+		b.WriteString(fmt.Sprintf("Points: %d\n", points))
 	}
 	if len(meta.Tags) > 0 {
 		b.WriteString(fmt.Sprintf("Tags: %s\n", strings.Join(meta.Tags, ", ")))
@@ -78,10 +81,12 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	}
 
 	// Connection info
-	if meta.Host != "" && meta.Port > 0 {
+	if hasConnection(meta) {
 		b.WriteString("## Connection\n")
-		b.WriteString(fmt.Sprintf("Host: %s\n", meta.Host))
-		b.WriteString(fmt.Sprintf("Port: %d\n", meta.Port))
+		if meta.Host != "" && meta.Port > 0 {
+			b.WriteString(fmt.Sprintf("Host: %s\n", meta.Host))
+			b.WriteString(fmt.Sprintf("Port: %d\n", meta.Port))
+		}
 		b.WriteString(fmt.Sprintf("Use from sandbox: %s\n", connectionCommand(meta)))
 		// Rewrite localhost -> host.docker.internal for Docker
 		if meta.Host == "localhost" || meta.Host == "127.0.0.1" {
@@ -107,7 +112,13 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	if len(meta.Hints) > 0 {
 		b.WriteString("## Hints\n")
 		for _, h := range meta.Hints {
-			b.WriteString(fmt.Sprintf("- %s\n", h.Text))
+			text := h.Text
+			if text == "" {
+				text = h.Content
+			}
+			if text != "" {
+				b.WriteString(fmt.Sprintf("- %s\n", text))
+			}
 		}
 		b.WriteString("\n")
 	}
@@ -118,23 +129,27 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 
 	// Instructions
 	b.WriteString("## Instructions\n")
-	if meta.Host != "" && meta.Port > 0 {
+	if hasConnection(meta) {
 		b.WriteString("1. Connect to the service now.\n")
 	} else {
 		b.WriteString("1. Inspect distfiles now.\n")
 	}
 	b.WriteString("2. Use the bash tool to run commands in the sandbox.\n")
-	b.WriteString("3. Use the available tools (bash, read_file, write_file, list_files, view_image, web_fetch, webhook_create, webhook_get_requests, check_findings).\n")
+	b.WriteString("3. Use the available tools (bash, read_file, write_file, list_files, view_image, web_fetch, webhook_create, webhook_get_requests, report_flag, post_finding, notify_coordinator, check_findings).\n")
 	b.WriteString("4. Be persistent and creative. Try multiple approaches.\n")
 	b.WriteString("5. The sandbox has extensive CTF tools installed - check /tools.txt for reference.\n")
 	b.WriteString("6. Ignore placeholder flags like CTF{flag} or CTF{placeholder}; report only the real challenge flag.\n")
-	b.WriteString("7. When you find the real flag, end with JSON on its own line: {\"type\":\"flag_found\",\"flag\":\"<flag>\",\"method\":\"<brief method>\"}\n")
-	b.WriteString("8. If JSON is impossible, output `FLAG: <value>` on its own line.\n")
+	b.WriteString("7. When you find the real flag, call report_flag with the exact flag, brief method, confidence, and evidence/reproduction command. This records the result locally and does not submit anywhere.\n")
+	b.WriteString("8. If report_flag is impossible, end with JSON on its own line: {\"type\":\"flag_found\",\"flag\":\"<flag>\",\"method\":\"<brief method>\"}\n")
+	b.WriteString("9. If JSON is impossible, output `FLAG: <value>` on its own line.\n")
 
 	return b.String()
 }
 
 func connectionCommand(meta *Meta) string {
+	if strings.TrimSpace(meta.ConnectionInfo) != "" {
+		return rewriteLocalhost(strings.TrimSpace(meta.ConnectionInfo))
+	}
 	host := meta.Host
 	if host == "localhost" || host == "127.0.0.1" {
 		host = "host.docker.internal"
@@ -143,6 +158,22 @@ func connectionCommand(meta *Meta) string {
 		return fmt.Sprintf("curl http://%s:%d/", host, meta.Port)
 	}
 	return fmt.Sprintf("nc %s %d", host, meta.Port)
+}
+
+func hasConnection(meta *Meta) bool {
+	return strings.TrimSpace(meta.ConnectionInfo) != "" || (meta.Host != "" && meta.Port > 0)
+}
+
+func metaPoints(meta *Meta) int {
+	if meta.Points > 0 {
+		return meta.Points
+	}
+	return meta.Value
+}
+
+func rewriteLocalhost(s string) string {
+	s = strings.ReplaceAll(s, "localhost", "host.docker.internal")
+	return strings.ReplaceAll(s, "127.0.0.1", "host.docker.internal")
 }
 
 func fileHint(filename string) string {
@@ -168,9 +199,9 @@ func fileHint(filename string) string {
 
 func connectionGuidance(meta *Meta) string {
 	conn := connectionCommand(meta)
-	if meta.ServiceType == "web" {
+	if isWebConnection(meta) {
 		return `This is a web service. Start with:
-- bash: curl -i ` + connURL(meta) + `/
+- bash: curl -i ` + webURL(meta) + `
 - web_fetch for simple GET/POST requests when no cookies/session are needed.
 - Prefer bash+curl or Python requests for cookies, sessions, redirects, and repeated fuzzing.
 `
@@ -190,6 +221,18 @@ func connURL(meta *Meta) string {
 		host = "host.docker.internal"
 	}
 	return fmt.Sprintf("http://%s:%d", host, meta.Port)
+}
+
+func isWebConnection(meta *Meta) bool {
+	conn := strings.TrimSpace(meta.ConnectionInfo)
+	return meta.ServiceType == "web" || strings.HasPrefix(conn, "http://") || strings.HasPrefix(conn, "https://")
+}
+
+func webURL(meta *Meta) string {
+	if strings.TrimSpace(meta.ConnectionInfo) != "" {
+		return connectionCommand(meta)
+	}
+	return connURL(meta) + "/"
 }
 
 func generalAnalysisGuidance(meta *Meta) string {

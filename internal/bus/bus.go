@@ -6,6 +6,7 @@ import (
 )
 
 const CoordinatorAuthor = "coordinator"
+const CoordinatorNotificationAuthor = "coordinator_notification"
 
 // Finding represents a discovery shared by a solver.
 type Finding struct {

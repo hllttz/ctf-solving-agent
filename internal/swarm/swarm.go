@@ -28,7 +28,9 @@ type Swarm struct {
 
 	mu      sync.Mutex
 	results []*solver.Result
+	solvers map[string]*solver.Solver
 	done    chan struct{}
+	cancel  context.CancelFunc
 }
 
 type solverInst struct {
@@ -56,6 +58,7 @@ func NewWithStrategy(name, dir string, modelSpecs []string, apiKeys map[string]s
 		memoryLimit:   memoryLimit,
 		strategyHint:  strategyHint,
 		bus:           bus.New(),
+		solvers:       make(map[string]*solver.Solver),
 		done:          make(chan struct{}),
 	}
 }
@@ -64,6 +67,9 @@ func NewWithStrategy(name, dir string, modelSpecs []string, apiKeys map[string]s
 func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	s.mu.Lock()
+	s.cancel = cancel
+	s.mu.Unlock()
 
 	if strings.TrimSpace(s.strategyHint) != "" {
 		s.bus.Broadcast(s.strategyHint)
@@ -98,6 +104,9 @@ func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 			sb:      sb,
 			modelID: spec,
 		}
+		s.mu.Lock()
+		s.solvers[spec] = inst.s
+		s.mu.Unlock()
 		instances = append(instances, inst)
 	}
 
@@ -235,6 +244,44 @@ func (s *Swarm) gatherSiblingInsights(excludeModel string) string {
 
 // Bus returns the swarm's message bus.
 func (s *Swarm) Bus() *bus.MessageBus { return s.bus }
+
+func (s *Swarm) Kill() {
+	s.mu.Lock()
+	cancel := s.cancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (s *Swarm) Bump(modelSpec, insights string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, ok := s.solvers[modelSpec]; !ok {
+		return false
+	}
+	s.bus.Post(bus.CoordinatorAuthor, fmt.Sprintf("Targeted bump for %s: %s", modelSpec, insights))
+	return true
+}
+
+func (s *Swarm) Status() map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	agents := make(map[string]any, len(s.solvers))
+	for spec, sol := range s.solvers {
+		agents[spec] = map[string]any{
+			"history_len": len(sol.History()),
+		}
+	}
+	return map[string]any{
+		"challenge": s.challengeName,
+		"active":    true,
+		"agents":    agents,
+		"findings":  s.bus.All(),
+	}
+}
 
 func sanitize(name string) string {
 	return strings.Map(func(r rune) rune {

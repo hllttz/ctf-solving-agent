@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -29,12 +31,14 @@ func (t *ViewImageTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 }
 
 func (t *ViewImageTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ Path string `json:"path"` }
+	var args struct {
+		Path string `json:"path"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("view_image: %w", err)
 	}
 
-	data, err := t.sb.ReadFileBytes(args.Path)
+	path, data, err := t.readImage(args.Path)
 	if err != nil {
 		return "", fmt.Errorf("view_image: %w", err)
 	}
@@ -48,7 +52,52 @@ func (t *ViewImageTool) InvokableRun(_ context.Context, argsJSON string, _ ...to
 		return "", fmt.Errorf("view_image: not a recognized image format")
 	}
 
-	return fmt.Sprintf("Image loaded: %s, %d bytes, type: %s", args.Path, len(data), mime), nil
+	return fmt.Sprintf(`Image loaded: %s
+Size: %d bytes
+Type: %s
+
+Suggested next commands:
+- file %s
+- exiftool %s
+- strings %s | head -80
+- binwalk %s
+- zsteg %s
+If this is a QR/screenshot/visual clue and the model cannot inspect pixels directly, use bash tools such as zbarimg, tesseract, or python/OpenCV in /workspace.`,
+		path, len(data), mime, shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path)), nil
+}
+
+func (t *ViewImageTool) readImage(path string) (string, []byte, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil, fmt.Errorf("path is required")
+	}
+	candidates := candidateImagePaths(path)
+	var lastErr error
+	for _, candidate := range candidates {
+		data, err := t.sb.ReadFileBytes(candidate)
+		if err == nil {
+			return candidate, data, nil
+		}
+		lastErr = err
+	}
+	return "", nil, lastErr
+}
+
+func candidateImagePaths(path string) []string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	candidates := []string{path}
+	if !strings.HasPrefix(path, "/") {
+		base := filepath.Base(path)
+		candidates = append(candidates,
+			filepath.Join("/challenge/distfiles", base),
+			filepath.Join("/workspace", base),
+			filepath.Join("/challenge/workspace", base),
+		)
+	}
+	return candidates
 }
 
 func detectImageMime(data []byte) string {
@@ -77,4 +126,8 @@ func detectImageMime(data []byte) string {
 		return "image/webp"
 	}
 	return ""
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

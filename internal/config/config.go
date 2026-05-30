@@ -25,6 +25,7 @@ type Config struct {
 	SingleChallenge    string
 	ChallengesDir      string
 	SkillsDir          string
+	MsgAddr            string
 	NoSubmit           bool
 	Verbose            bool
 }
@@ -52,6 +53,7 @@ func Load() *Config {
 		CoordinatorBackend: getEnv("COORDINATOR_BACKEND", "claude"),
 		ChallengesDir:      getEnv("CHALLENGES_DIR", "./challenges"),
 		SkillsDir:          getEnv("SKILLS_DIR", "./skills"),
+		MsgAddr:            getEnv("MSG_ADDR", "127.0.0.1:0"),
 		NoSubmit:           getEnvBool("NO_SUBMIT", false),
 		Verbose:            getEnvBool("VERBOSE", false),
 	}

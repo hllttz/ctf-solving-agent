@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -15,6 +16,41 @@ type CheckFindingsTool struct {
 	bus       *bus.MessageBus
 	cursor    *int
 	agentName string
+}
+
+// NotifyCoordinatorTool lets a solver send a strategic message to the coordinator/operator.
+type NotifyCoordinatorTool struct {
+	bus       *bus.MessageBus
+	agentName string
+}
+
+func NewNotifyCoordinatorTool(b *bus.MessageBus, agentName string) *NotifyCoordinatorTool {
+	return &NotifyCoordinatorTool{bus: b, agentName: agentName}
+}
+
+func (t *NotifyCoordinatorTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{
+		Name: "notify_coordinator",
+		Desc: "Send a strategic message to the local coordinator/operator. Use for major discoveries, requests for guidance, or cross-challenge leads.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"message": {Type: schema.String, Desc: "Concise coordinator-facing message", Required: true},
+		}),
+	}, nil
+}
+
+func (t *NotifyCoordinatorTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
+	var args struct {
+		Message string `json:"message"`
+	}
+	if err := unmarshalArgs(argsJSON, &args); err != nil {
+		return "", fmt.Errorf("notify_coordinator: %w", err)
+	}
+	message := strings.TrimSpace(args.Message)
+	if message == "" {
+		return "No coordinator message sent: message was empty.", nil
+	}
+	t.bus.Post(bus.CoordinatorNotificationAuthor, fmt.Sprintf("[%s] %s", t.agentName, message))
+	return "Message sent to coordinator/operator.", nil
 }
 
 func NewCheckFindingsTool(b *bus.MessageBus, cursor *int) *CheckFindingsTool {

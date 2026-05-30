@@ -88,3 +88,42 @@ func TestBuildWebConnectionGuidance(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildIncludesReportFlagTool(t *testing.T) {
+	meta := &Meta{Name: "local", Category: "misc"}
+
+	got := Build(meta, "/challenge/distfiles", "/workspace")
+
+	for _, want := range []string{
+		"report_flag",
+		"records the result locally",
+		"does not submit anywhere",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestBuildSupportsRemoteMetadataFormat(t *testing.T) {
+	meta := &Meta{
+		Name:           "remote-format",
+		Category:       "misc",
+		Value:          500,
+		ConnectionInfo: "nc 127.0.0.1 31337",
+		Hints:          []Hint{{Content: "visible hint"}},
+	}
+
+	got := Build(meta, "/challenge/distfiles", "/workspace")
+
+	for _, want := range []string{
+		"Points: 500",
+		"nc host.docker.internal 31337",
+		"visible hint",
+		"1. Connect to the service now.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, got)
+		}
+	}
+}
