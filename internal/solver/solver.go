@@ -18,6 +18,7 @@ import (
 
 	"github.com/verialabs/ctf-agent/internal/bus"
 	"github.com/verialabs/ctf-agent/internal/loopdetect"
+	"github.com/verialabs/ctf-agent/internal/models"
 	"github.com/verialabs/ctf-agent/internal/sandbox"
 	sandboxTools "github.com/verialabs/ctf-agent/internal/tools"
 	"github.com/verialabs/ctf-agent/internal/trace"
@@ -55,6 +56,7 @@ type Solver struct {
 	result    *Result
 	challenge string
 	agentName string
+	modelInfo models.SpecInfo
 	messages  []*schema.Message
 	tracer    *trace.Tracer
 	stepCount int
@@ -83,6 +85,7 @@ func NewWithNameForChallenge(m model.ToolCallingChatModel, sb sandbox.Sandbox, b
 		result:    &Result{Status: Running},
 		challenge: challenge,
 		agentName: agentName,
+		modelInfo: models.InspectSpec(agentName),
 		tracer:    tracer,
 	}
 }
@@ -113,6 +116,11 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	tools := s.buildTools()
 	s.traceEvent("start", 0, "", map[string]any{
 		"preserve_history": preserveHistory,
+		"provider":         s.modelInfo.Provider,
+		"model_id":         s.modelInfo.ModelID,
+		"effort":           s.modelInfo.Effort,
+		"context_window":   s.modelInfo.ContextWindow,
+		"supports_vision":  s.modelInfo.SupportsVision,
 	})
 
 	// Build the ReAct agent
@@ -321,18 +329,21 @@ func (s *Solver) tracePath() string {
 }
 
 func (s *Solver) buildTools() []tool.BaseTool {
-	return []tool.BaseTool{
+	tools := []tool.BaseTool{
 		sandboxTools.NewBashTool(s.sandbox),
 		sandboxTools.NewReadFileTool(s.sandbox),
 		sandboxTools.NewWriteFileTool(s.sandbox),
 		sandboxTools.NewListFilesTool(s.sandbox),
-		sandboxTools.NewViewImageTool(s.sandbox),
 		sandboxTools.NewWebFetchTool(),
 		sandboxTools.NewWebhookCreateTool(),
 		sandboxTools.NewWebhookGetRequestsTool(),
 		sandboxTools.NewPostFindingTool(s.bus, s.agentName),
 		sandboxTools.NewCheckFindingsToolFor(s.bus, &s.busCursor, s.agentName),
 	}
+	if s.modelInfo.SupportsVision {
+		tools = append(tools, sandboxTools.NewViewImageTool(s.sandbox))
+	}
+	return tools
 }
 
 func (s *Solver) postSummary(content string, result *Result) {
