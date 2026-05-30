@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -54,15 +55,21 @@ func NewWebFetchTool() *WebFetchTool { return &WebFetchTool{} }
 func (t *WebFetchTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "web_fetch",
-		Desc: "Fetch a URL. Internal/private IPs are blocked for security.",
+		Desc: "Fetch a URL. Supports method/body. Internal/private IPs are blocked for security.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"url": {Type: schema.String, Desc: "URL to fetch", Required: true},
+			"url":    {Type: schema.String, Desc: "URL to fetch", Required: true},
+			"method": {Type: schema.String, Desc: "HTTP method (default GET)", Required: false},
+			"body":   {Type: schema.String, Desc: "Optional request body", Required: false},
 		}),
 	}, nil
 }
 
 func (t *WebFetchTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ URL string `json:"url"` }
+	var args struct {
+		URL    string `json:"url"`
+		Method string `json:"method"`
+		Body   string `json:"body"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("web_fetch: %w", err)
 	}
@@ -72,24 +79,30 @@ func (t *WebFetchTool) InvokableRun(_ context.Context, argsJSON string, _ ...too
 		u = "http://" + u
 	}
 
-	host := u
-	if after, ok := strings.CutPrefix(u, "http://"); ok {
-		host = after
-	} else if after, ok := strings.CutPrefix(u, "https://"); ok {
-		host = after
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
 	}
-	if idx := strings.Index(host, "/"); idx >= 0 {
-		host = host[:idx]
-	}
-	if idx := strings.Index(host, ":"); idx >= 0 {
-		host = host[:idx]
-	}
+	host := parsed.Hostname()
 
 	if isBlocked(host) {
 		return "", fmt.Errorf("blocked: %s is an internal/private address", host)
 	}
 
-	resp, err := httpClient.Get(u)
+	method := strings.ToUpper(strings.TrimSpace(args.Method))
+	if method == "" {
+		method = http.MethodGet
+	}
+	req, err := http.NewRequest(method, u, strings.NewReader(args.Body))
+	if err != nil {
+		return "", fmt.Errorf("request error: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	if args.Body != "" && req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch error: %w", err)
 	}
@@ -100,7 +113,7 @@ func (t *WebFetchTool) InvokableRun(_ context.Context, argsJSON string, _ ...too
 	if len(body) > maxLen {
 		body = body[:maxLen]
 	}
-	return fmt.Sprintf("Status: %d\n\n%s", resp.StatusCode, string(body)), nil
+	return fmt.Sprintf("HTTP %d %s\n\n%s", resp.StatusCode, resp.Status, string(body)), nil
 }
 
 // WebhookCreateTool creates a webhook.site token for XSS/SSRF callbacks.
@@ -110,8 +123,8 @@ func NewWebhookCreateTool() *WebhookCreateTool { return &WebhookCreateTool{} }
 
 func (t *WebhookCreateTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "webhook_create",
-		Desc: "Create a webhook.site token for capturing HTTP callbacks (XSS, SSRF).",
+		Name:        "webhook_create",
+		Desc:        "Create a webhook.site token for capturing HTTP callbacks (XSS, SSRF).",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
 	}, nil
 }
@@ -151,7 +164,9 @@ func (t *WebhookGetRequestsTool) Info(_ context.Context) (*schema.ToolInfo, erro
 }
 
 func (t *WebhookGetRequestsTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ Token string `json:"token"` }
+	var args struct {
+		Token string `json:"token"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("webhook_get_requests: %w", err)
 	}

@@ -23,17 +23,25 @@ func (t *BashTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 		Desc: "Execute a bash command in the sandbox. Use for running CTF tools, " +
 			"analyzing files, debugging binaries. Output truncated at ~24K chars.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"command": {Type: schema.String, Desc: "Bash command to execute", Required: true},
+			"command":         {Type: schema.String, Desc: "Bash command to execute", Required: true},
+			"timeout_seconds": {Type: schema.Integer, Desc: "Optional command timeout in seconds (default 60)", Required: false},
 		}),
 	}, nil
 }
 
 func (t *BashTool) InvokableRun(ctx context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ Command string `json:"command"` }
+	var args struct {
+		Command        string `json:"command"`
+		TimeoutSeconds int    `json:"timeout_seconds"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("bash: %w", err)
 	}
-	return t.sb.Exec(ctx, args.Command)
+	result, err := t.sb.ExecWithTimeout(ctx, args.Command, args.TimeoutSeconds)
+	if err != nil {
+		return "", err
+	}
+	return sandbox.FormatExecResult(result), nil
 }
 
 // ReadFileTool reads files from the sandbox.
@@ -54,7 +62,9 @@ func (t *ReadFileTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 }
 
 func (t *ReadFileTool) InvokableRun(_ context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ Path string `json:"path"` }
+	var args struct {
+		Path string `json:"path"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
@@ -111,7 +121,9 @@ func (t *ListFilesTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 }
 
 func (t *ListFilesTool) InvokableRun(ctx context.Context, argsJSON string, _ ...tool.Option) (string, error) {
-	var args struct{ Path string `json:"path"` }
+	var args struct {
+		Path string `json:"path"`
+	}
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("list_files: %w", err)
 	}
