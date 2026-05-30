@@ -1,25 +1,25 @@
 # ctf-agent
 
-Autonomous local CTF solving agent written in Go. It runs one or more model-backed solvers against challenge directories in isolated Docker sandboxes.
+一个用 Go 编写的本地 CTF 解题代理。它会把题目放进隔离的 Docker sandbox 里，由一个或多个模型并行尝试解题。
 
-## Build Sandbox
+## 构建 Sandbox
 
 ```bash
 docker build -f sandbox/Dockerfile.sandbox -t ctf-sandbox .
 ```
 
-The sandbox expects challenge directories shaped like:
+题目目录结构如下：
 
 ```text
 challenge/
   metadata.yml
   distfiles/
-  workspace/      # created automatically when missing
+  workspace/      # 不存在时会自动创建
 ```
 
-## Run
+## 使用方法
 
-For a manual challenge where you only have attachments and a target:
+只有附件和靶机地址时，直接用 `run`：
 
 ```bash
 go run ./cmd/ctf-agent run \
@@ -28,7 +28,7 @@ go run ./cmd/ctf-agent run \
   --category pwn
 ```
 
-For a web target:
+Web 题目示例：
 
 ```bash
 go run ./cmd/ctf-agent run \
@@ -38,14 +38,18 @@ go run ./cmd/ctf-agent run \
   --name baby-web
 ```
 
-The `run` command creates a challenge directory under `./challenges`, copies attachments into `distfiles/`, writes `metadata.yml`, then starts solving.
+`run` 会自动在 `./challenges` 下创建题目目录，把附件复制到 `distfiles/`，写入 `metadata.yml`，然后开始解题。
+
+已有题目目录时，也可以直接跑：
 
 ```bash
 go run ./cmd/ctf-agent single ./challenges/example
 go run ./cmd/ctf-agent solve ./challenges
 ```
 
-Configure models and keys with environment variables:
+## 模型配置
+
+通过环境变量配置模型和密钥：
 
 ```bash
 export MODEL_SPECS=openai/gpt-5.4,anthropic/claude-opus-4-6
