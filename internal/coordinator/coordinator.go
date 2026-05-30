@@ -20,6 +20,7 @@ type Coordinator struct {
 	modelSpecs    []string
 	apiKeys       map[string]string
 	sandboxImage  string
+	memoryLimit   string
 	maxConcurrent int
 	skillsPrompt  string
 
@@ -31,16 +32,22 @@ type Coordinator struct {
 
 // New creates a new coordinator.
 func New(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int) *Coordinator {
-	return NewWithSkills(challengesDir, modelSpecs, apiKeys, sandboxImage, maxConcurrent, "")
+	return NewWithOptions(challengesDir, modelSpecs, apiKeys, sandboxImage, "16g", maxConcurrent, "")
 }
 
 // NewWithSkills creates a coordinator with optional prompt skill content.
 func NewWithSkills(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int, skillsPrompt string) *Coordinator {
+	return NewWithOptions(challengesDir, modelSpecs, apiKeys, sandboxImage, "16g", maxConcurrent, skillsPrompt)
+}
+
+// NewWithOptions creates a coordinator with sandbox and prompt options.
+func NewWithOptions(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsPrompt string) *Coordinator {
 	return &Coordinator{
 		challengesDir: challengesDir,
 		modelSpecs:    modelSpecs,
 		apiKeys:       apiKeys,
 		sandboxImage:  sandboxImage,
+		memoryLimit:   memoryLimit,
 		maxConcurrent: maxConcurrent,
 		skillsPrompt:  skillsPrompt,
 		swarms:        make(map[string]*swarm.Swarm),
@@ -127,7 +134,7 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	}
 
 	log.Printf("[coordinator] Starting swarm for %s (%s)", challenge, meta.Category)
-	sw := swarm.New(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage)
+	sw := swarm.NewWithOptions(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage, c.memoryLimit)
 	c.mu.Lock()
 	c.swarms[challenge] = sw
 	c.mu.Unlock()

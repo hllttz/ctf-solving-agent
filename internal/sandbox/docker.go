@@ -13,6 +13,14 @@ import (
 )
 
 const execTimeout = 60 * time.Second
+const ContainerLabel = "ctf-agent"
+
+type DockerOptions struct {
+	Image        string
+	Name         string
+	ChallengeDir string
+	MemoryLimit  string
+}
 
 type DockerSandbox struct {
 	containerID   string
@@ -24,32 +32,39 @@ type DockerSandbox struct {
 }
 
 func NewDocker(ctx context.Context, image, name, challengeDir string) (Sandbox, error) {
+	return NewDockerWithOptions(ctx, DockerOptions{
+		Image:        image,
+		Name:         name,
+		ChallengeDir: challengeDir,
+		MemoryLimit:  "16g",
+	})
+}
+
+func NewDockerWithOptions(ctx context.Context, opts DockerOptions) (Sandbox, error) {
 	workspace := "/workspace"
 	distfiles := "/challenge/distfiles"
 
-	workspaceHost := challengeDir + "/workspace"
-	distfilesHost := challengeDir + "/distfiles"
+	memoryLimit := strings.TrimSpace(opts.MemoryLimit)
+	if memoryLimit == "" {
+		memoryLimit = "16g"
+	}
+
+	workspaceHost := opts.ChallengeDir + "/workspace"
+	distfilesHost := opts.ChallengeDir + "/distfiles"
+	metadataHost := opts.ChallengeDir + "/metadata.yml"
 
 	os.MkdirAll(workspaceHost, 0755)
 
 	// Remove existing container with same name
-	exec.CommandContext(ctx, "docker", "rm", "-f", name).Run()
+	exec.CommandContext(ctx, "docker", "rm", "-f", opts.Name).Run()
 
 	// Create and start container
-	createCmd := exec.CommandContext(ctx, "docker", "run", "-d",
-		"--name", name,
-		"--network", "bridge",
-		"--add-host", "host.docker.internal:host-gateway",
-		"--cap-add", "SYS_ADMIN",
-		"--cap-add", "SYS_PTRACE",
-		"--cpus", "2",
-		"--memory", "16g",
-		"-v", distfilesHost+":"+distfiles+":ro",
-		"-v", workspaceHost+":"+workspace,
-		"-w", workspace,
-		image,
-		"sleep", "infinity",
-	)
+	mountMetadata := false
+	if _, err := os.Stat(metadataHost); err == nil {
+		mountMetadata = true
+	}
+	args := dockerRunArgs(opts, workspaceHost, distfilesHost, metadataHost, mountMetadata)
+	createCmd := exec.CommandContext(ctx, "docker", args...)
 
 	output, err := createCmd.CombinedOutput()
 	if err != nil {
@@ -60,11 +75,61 @@ func NewDocker(ctx context.Context, image, name, challengeDir string) (Sandbox, 
 
 	return &DockerSandbox{
 		containerID:   containerID,
-		containerName: name,
+		containerName: opts.Name,
 		workspace:     workspace,
 		distfiles:     distfiles,
-		challengeDir:  challengeDir,
+		challengeDir:  opts.ChallengeDir,
 	}, nil
+}
+
+func CleanupOrphans(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "docker", "ps", "-aq", "--filter", "label="+ContainerLabel+"=true")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("list orphan containers: %w", err)
+	}
+	ids := strings.Fields(string(output))
+	if len(ids) == 0 {
+		return nil
+	}
+	args := append([]string{"rm", "-f"}, ids...)
+	if output, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("remove orphan containers: %w: %s", err, string(output))
+	}
+	return nil
+}
+
+func dockerRunArgs(opts DockerOptions, workspaceHost, distfilesHost, metadataHost string, mountMetadata bool) []string {
+	workspace := "/workspace"
+	distfiles := "/challenge/distfiles"
+	metadata := "/challenge/metadata.yml"
+
+	memoryLimit := strings.TrimSpace(opts.MemoryLimit)
+	if memoryLimit == "" {
+		memoryLimit = "16g"
+	}
+
+	args := []string{
+		"run", "-d",
+		"--name", opts.Name,
+		"--label", ContainerLabel + "=true",
+		"--network", "bridge",
+		"--add-host", "host.docker.internal:host-gateway",
+		"--cap-add", "SYS_ADMIN",
+		"--cap-add", "SYS_PTRACE",
+		"--cpus", "2",
+		"--memory", memoryLimit,
+		"-v", distfilesHost + ":" + distfiles + ":ro",
+		"-v", workspaceHost + ":" + workspace,
+	}
+	if mountMetadata {
+		args = append(args, "-v", metadataHost+":"+metadata+":ro")
+	}
+	return append(args,
+		"-w", workspace,
+		opts.Image,
+		"sleep", "infinity",
+	)
 }
 
 func (s *DockerSandbox) Exec(ctx context.Context, command string) (string, error) {

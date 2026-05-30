@@ -21,6 +21,7 @@ type Swarm struct {
 	modelSpecs    []string
 	apiKeys       map[string]string
 	sandboxImage  string
+	memoryLimit   string
 
 	bus *bus.MessageBus
 
@@ -37,12 +38,17 @@ type solverInst struct {
 
 // New creates a new swarm for a challenge.
 func New(name, dir string, modelSpecs []string, apiKeys map[string]string, image string) *Swarm {
+	return NewWithOptions(name, dir, modelSpecs, apiKeys, image, "16g")
+}
+
+func NewWithOptions(name, dir string, modelSpecs []string, apiKeys map[string]string, image, memoryLimit string) *Swarm {
 	return &Swarm{
 		challengeName: name,
 		challengeDir:  dir,
 		modelSpecs:    modelSpecs,
 		apiKeys:       apiKeys,
 		sandboxImage:  image,
+		memoryLimit:   memoryLimit,
 		bus:           bus.New(),
 		done:          make(chan struct{}),
 	}
@@ -65,7 +71,12 @@ func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 		}
 
 		containerName := fmt.Sprintf("ctf-%s-%d", sanitize(s.challengeName), i)
-		sb, err := sandbox.NewDocker(ctx, s.sandboxImage, containerName, s.challengeDir)
+		sb, err := sandbox.NewDockerWithOptions(ctx, sandbox.DockerOptions{
+			Image:        s.sandboxImage,
+			Name:         containerName,
+			ChallengeDir: s.challengeDir,
+			MemoryLimit:  s.memoryLimit,
+		})
 		if err != nil {
 			log.Printf("[swarm:%s] sandbox create failed for %s: %v", s.challengeName, spec, err)
 			continue

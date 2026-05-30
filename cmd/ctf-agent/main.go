@@ -15,6 +15,7 @@ import (
 	"github.com/verialabs/ctf-agent/internal/coordinator"
 	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/prompt"
+	"github.com/verialabs/ctf-agent/internal/sandbox"
 	"github.com/verialabs/ctf-agent/internal/skills"
 	"github.com/verialabs/ctf-agent/internal/solver"
 	"github.com/verialabs/ctf-agent/internal/swarm"
@@ -72,9 +73,12 @@ func solveCmd(cfg *config.Config) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := sandbox.CleanupOrphans(ctx); err != nil {
+				log.Printf("sandbox cleanup skipped: %v", err)
+			}
 
-			coord := coordinator.NewWithSkills(challengesDir,
-				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MaxConcurrent, skillsPrompt)
+			coord := coordinator.NewWithOptions(challengesDir,
+				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit, cfg.MaxConcurrent, skillsPrompt)
 
 			results := coord.SolveAll(ctx)
 
@@ -140,8 +144,11 @@ func singleCmd(cfg *config.Config) *cobra.Command {
 
 			fmt.Printf("Solving: %s (%s)\n", meta.Name, meta.Category)
 			fmt.Printf("Models: %v\n\n", cfg.ModelSpecs)
+			if err := sandbox.CleanupOrphans(ctx); err != nil {
+				log.Printf("sandbox cleanup skipped: %v", err)
+			}
 
-			sw := swarm.New(meta.Name, challengeDir, cfg.ModelSpecs, apiKeys, cfg.SandboxImage)
+			sw := swarm.NewWithOptions(meta.Name, challengeDir, cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit)
 			result := sw.Run(ctx, sysPrompt)
 
 			fmt.Println()
