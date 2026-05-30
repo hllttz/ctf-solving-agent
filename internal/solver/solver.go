@@ -2,8 +2,10 @@ package solver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -152,10 +154,10 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	_ = startTime
 
 	// Extract flag if present in the output
-	if flag := extractFlag(output.Content); flag != "" {
+	if flag, method := extractFlagResult(output.Content); flag != "" {
 		result.Status = FlagFound
 		result.Flag = flag
-		result.Method = "ReAct agent output"
+		result.Method = method
 	}
 	s.postSummary(output.Content, result)
 	s.traceEvent("finish", result.Steps, "", map[string]any{
@@ -347,9 +349,140 @@ func (s *Solver) postSummary(content string, result *Result) {
 	s.bus.Post(s.agentName, summary)
 }
 
+type flagOutput struct {
+	Type   string `json:"type"`
+	Flag   string `json:"flag"`
+	Method string `json:"method"`
+}
+
+// extractFlagResult attempts to extract a final flag from structured output first,
+// then falls back to explicit FLAG lines and common flag patterns.
+func extractFlagResult(text string) (string, string) {
+	if flag, method := extractJSONFlag(text); flag != "" {
+		return flag, method
+	}
+	if isStructuredNonFlag(text) {
+		return "", ""
+	}
+	if flag := extractFlagLine(text); flag != "" {
+		return flag, "FLAG line"
+	}
+	if flag := extractFlag(text); flag != "" {
+		return flag, "flag pattern fallback"
+	}
+	return "", ""
+}
+
+func extractJSONFlag(text string) (string, string) {
+	candidates := []string{strings.TrimSpace(text)}
+	candidates = append(candidates, fencedJSONBlocks(text)...)
+	candidates = append(candidates, jsonObjects(text)...)
+
+	for _, candidate := range candidates {
+		var out flagOutput
+		if err := json.Unmarshal([]byte(candidate), &out); err != nil {
+			continue
+		}
+		flag := strings.TrimSpace(out.Flag)
+		if flag == "" {
+			continue
+		}
+		if out.Type != "" && out.Type != "flag_found" {
+			continue
+		}
+		method := strings.TrimSpace(out.Method)
+		if method == "" {
+			method = "structured output"
+		}
+		return flag, method
+	}
+	return "", ""
+}
+
+func fencedJSONBlocks(text string) []string {
+	re := regexp.MustCompile("(?is)```(?:json)?\\s*(\\{.*?\\})\\s*```")
+	matches := re.FindAllStringSubmatch(text, -1)
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) > 1 {
+			out = append(out, strings.TrimSpace(match[1]))
+		}
+	}
+	return out
+}
+
+func jsonObjects(text string) []string {
+	var out []string
+	for start := strings.IndexByte(text, '{'); start >= 0 && start < len(text); {
+		depth := 0
+		inString := false
+		escaped := false
+		for i := start; i < len(text); i++ {
+			ch := text[i]
+			if inString {
+				if escaped {
+					escaped = false
+					continue
+				}
+				if ch == '\\' {
+					escaped = true
+					continue
+				}
+				if ch == '"' {
+					inString = false
+				}
+				continue
+			}
+			switch ch {
+			case '"':
+				inString = true
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					out = append(out, text[start:i+1])
+					next := strings.IndexByte(text[i+1:], '{')
+					if next == -1 {
+						return out
+					}
+					start = i + 1 + next
+					i = len(text)
+				}
+			}
+		}
+		if depth != 0 {
+			return out
+		}
+	}
+	return out
+}
+
+func extractFlagLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		upper := strings.ToUpper(line)
+		if strings.HasPrefix(upper, "FLAG:") {
+			return strings.TrimSpace(line[len("FLAG:"):])
+		}
+	}
+	return ""
+}
+
+func isStructuredNonFlag(text string) bool {
+	var out flagOutput
+	if err := json.Unmarshal([]byte(strings.TrimSpace(text)), &out); err != nil {
+		return false
+	}
+	return strings.TrimSpace(out.Flag) != "" && out.Type != "" && out.Type != "flag_found"
+}
+
 // extractFlag attempts to extract a flag pattern from text.
 func extractFlag(text string) string {
-	patterns := []string{"CTF{", "flag{", "FLAG{", "ctf{", "hsctf{"}
+	patterns := []string{"hsctf{", "CTF{", "flag{", "FLAG{", "ctf{"}
 	for _, prefix := range patterns {
 		idx := 0
 		for {
