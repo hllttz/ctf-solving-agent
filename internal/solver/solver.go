@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/verialabs/ctf-agent/internal/loopdetect"
 	"github.com/verialabs/ctf-agent/internal/sandbox"
 	sandboxTools "github.com/verialabs/ctf-agent/internal/tools"
+	"github.com/verialabs/ctf-agent/internal/trace"
 )
 
 // Status represents the solver's current state.
@@ -49,8 +51,11 @@ type Solver struct {
 	busCursor int
 	detector  *loopdetect.Detector
 	result    *Result
+	challenge string
 	agentName string
 	messages  []*schema.Message
+	tracer    *trace.Tracer
+	stepCount int
 	mu        sync.Mutex
 }
 
@@ -60,13 +65,23 @@ func New(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus) *S
 }
 
 func NewWithName(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus, agentName string) *Solver {
+	return NewWithNameForChallenge(m, sb, b, agentName, "challenge")
+}
+
+func NewWithNameForChallenge(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus, agentName, challenge string) *Solver {
+	tracer, err := trace.NewSolverTracer("logs", challenge, agentName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "trace disabled for %s: %v\n", agentName, err)
+	}
 	return &Solver{
 		model:     m,
 		sandbox:   sb,
 		bus:       b,
 		detector:  loopdetect.New(),
 		result:    &Result{Status: Running},
+		challenge: challenge,
 		agentName: agentName,
+		tracer:    tracer,
 	}
 }
 
@@ -94,6 +109,9 @@ func (s *Solver) run(ctx context.Context, systemPrompt string) (*Result, error) 
 func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessage string, preserveHistory bool) (*Result, error) {
 	// Build tools for this solver
 	tools := s.buildTools()
+	s.traceEvent("start", 0, "", map[string]any{
+		"preserve_history": preserveHistory,
+	})
 
 	// Build the ReAct agent
 	agent, err := react.NewAgent(ctx, &react.AgentConfig{
@@ -101,7 +119,7 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 		ToolsConfig: compose.ToolsNodeConfig{
 			Tools: tools,
 			ToolCallMiddlewares: []compose.ToolMiddleware{
-				s.detector.Middleware(),
+				s.toolMiddleware(),
 			},
 		},
 		MaxStep: 100,
@@ -117,14 +135,19 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	// Run the agent
 	output, err := agent.Generate(ctx, input)
 	if err != nil {
+		s.traceEvent("error", 0, "", map[string]any{"error": err.Error()})
 		return nil, fmt.Errorf("agent run: %w", err)
 	}
 	s.recordTurn(input, output)
+	s.traceEvent("model_response", s.currentStep(), "", map[string]any{
+		"text": truncateString(output.Content, 2000),
+	})
 
 	result := &Result{
 		Status:   GaveUp,
-		Steps:    len(s.detector.History()),
+		Steps:    s.currentStep(),
 		Findings: []string{output.Content},
+		LogPath:  s.tracePath(),
 	}
 	_ = startTime
 
@@ -135,6 +158,11 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 		result.Method = "ReAct agent output"
 	}
 	s.postSummary(output.Content, result)
+	s.traceEvent("finish", result.Steps, "", map[string]any{
+		"status": result.Status,
+		"flag":   result.Flag,
+		"method": result.Method,
+	})
 
 	return result, nil
 }
@@ -145,6 +173,9 @@ func (s *Solver) Bump(ctx context.Context, systemPrompt string, insights string)
 	go func() {
 		defer close(resultCh)
 		s.detector.Reset()
+		s.traceEvent("bump", s.currentStep(), "", map[string]any{
+			"insights": truncateString(insights, 2000),
+		})
 		result, err := s.runWithUserMessage(ctx, systemPrompt, "Your previous attempt did not find the flag. "+
 			"Here are insights from other solver agents working on the same challenge:\n\n"+
 			insights+"\n\nUse these insights to guide your approach. Try a different approach. "+
@@ -185,6 +216,106 @@ func cloneMessages(messages []*schema.Message) []*schema.Message {
 	out := make([]*schema.Message, len(messages))
 	copy(out, messages)
 	return out
+}
+
+func (s *Solver) toolMiddleware() compose.ToolMiddleware {
+	return compose.ToolMiddleware{
+		Invokable: func(next compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
+			return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
+				step := s.nextStep()
+				s.traceEvent("tool_call", step, input.Name, map[string]any{
+					"arguments": truncateString(input.Arguments, 2000),
+				})
+
+				output, err := next(ctx, input)
+				if err != nil {
+					s.traceEvent("tool_error", step, input.Name, map[string]any{"error": err.Error()})
+					return nil, err
+				}
+
+				if msg := s.detector.Check(input.Name, input.Arguments); msg != "" {
+					if output.Result != "" {
+						output.Result += "\n"
+					}
+					output.Result += msg
+				}
+
+				if step%5 == 0 {
+					if findings := s.checkFindingsText(); findings != "" {
+						if output.Result != "" {
+							output.Result += "\n\n---\n"
+						}
+						output.Result += findings
+						s.traceEvent("findings_injected", step, input.Name, map[string]any{
+							"findings": truncateString(findings, 2000),
+						})
+					}
+				}
+
+				s.traceEvent("tool_result", step, input.Name, map[string]any{
+					"result": truncateString(output.Result, 2000),
+				})
+				return output, nil
+			}
+		},
+		Streamable: func(next compose.StreamableToolEndpoint) compose.StreamableToolEndpoint {
+			return func(ctx context.Context, input *compose.ToolInput) (*compose.StreamToolOutput, error) {
+				step := s.nextStep()
+				s.traceEvent("tool_call", step, input.Name, map[string]any{
+					"arguments": truncateString(input.Arguments, 2000),
+					"stream":    true,
+				})
+				output, err := next(ctx, input)
+				if err != nil {
+					s.traceEvent("tool_error", step, input.Name, map[string]any{"error": err.Error()})
+					return nil, err
+				}
+				_ = s.detector.Check(input.Name, input.Arguments)
+				return output, nil
+			}
+		},
+	}
+}
+
+func (s *Solver) checkFindingsText() string {
+	items, nextCursor := s.bus.CheckFor(s.agentName, s.busCursor)
+	s.busCursor = nextCursor
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Findings from other agents:\n")
+	for _, item := range items {
+		b.WriteString(fmt.Sprintf("[%s] %s\n", item.Author, item.Content))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (s *Solver) nextStep() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stepCount++
+	return s.stepCount
+}
+
+func (s *Solver) currentStep() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stepCount
+}
+
+func (s *Solver) traceEvent(eventType string, step int, tool string, data map[string]any) {
+	if s.tracer == nil {
+		return
+	}
+	s.tracer.LogEvent(eventType, s.agentName, s.challenge, step, tool, data)
+}
+
+func (s *Solver) tracePath() string {
+	if s.tracer == nil {
+		return ""
+	}
+	return s.tracer.Path()
 }
 
 func (s *Solver) buildTools() []tool.BaseTool {
@@ -253,4 +384,11 @@ func extractFlag(text string) string {
 // History exposes the detector history for debugging.
 func (s *Solver) History() []string {
 	return s.detector.History()
+}
+
+func truncateString(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

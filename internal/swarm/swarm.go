@@ -73,7 +73,7 @@ func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 		sandboxes = append(sandboxes, sb)
 
 		inst := solverInst{
-			s:       solver.NewWithName(m, sb, s.bus, spec),
+			s:       solver.NewWithNameForChallenge(m, sb, s.bus, spec, s.challengeName),
 			sb:      sb,
 			modelID: spec,
 		}

@@ -15,6 +15,7 @@ import (
 	"github.com/verialabs/ctf-agent/internal/coordinator"
 	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/prompt"
+	"github.com/verialabs/ctf-agent/internal/skills"
 	"github.com/verialabs/ctf-agent/internal/solver"
 	"github.com/verialabs/ctf-agent/internal/swarm"
 )
@@ -67,9 +68,13 @@ func solveCmd(cfg *config.Config) *cobra.Command {
 			}()
 
 			costTracker := cost.NewTracker()
+			skillsPrompt, err := skills.LoadDir(cfg.SkillsDir)
+			if err != nil {
+				return err
+			}
 
-			coord := coordinator.New(challengesDir,
-				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MaxConcurrent)
+			coord := coordinator.NewWithSkills(challengesDir,
+				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MaxConcurrent, skillsPrompt)
 
 			results := coord.SolveAll(ctx)
 
@@ -108,6 +113,13 @@ func singleCmd(cfg *config.Config) *cobra.Command {
 			sysPrompt := prompt.Build(meta,
 				filepath.Join(challengeDir, "distfiles"),
 				filepath.Join(challengeDir, "workspace"))
+			skillsPrompt, err := skills.LoadDir(cfg.SkillsDir)
+			if err != nil {
+				return err
+			}
+			if skillsPrompt != "" {
+				sysPrompt += "\n\n" + skillsPrompt
+			}
 
 			apiKeys := map[string]string{
 				"anthropic": cfg.AnthropicAPIKey,

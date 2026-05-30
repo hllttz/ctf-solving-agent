@@ -21,21 +21,28 @@ type Coordinator struct {
 	apiKeys       map[string]string
 	sandboxImage  string
 	maxConcurrent int
+	skillsPrompt  string
 
-	mu       sync.Mutex
-	swarms   map[string]*swarm.Swarm
-	results  map[string]*solver.Result
-	solved   map[string]bool
+	mu      sync.Mutex
+	swarms  map[string]*swarm.Swarm
+	results map[string]*solver.Result
+	solved  map[string]bool
 }
 
 // New creates a new coordinator.
 func New(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int) *Coordinator {
+	return NewWithSkills(challengesDir, modelSpecs, apiKeys, sandboxImage, maxConcurrent, "")
+}
+
+// NewWithSkills creates a coordinator with optional prompt skill content.
+func NewWithSkills(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int, skillsPrompt string) *Coordinator {
 	return &Coordinator{
 		challengesDir: challengesDir,
 		modelSpecs:    modelSpecs,
 		apiKeys:       apiKeys,
 		sandboxImage:  sandboxImage,
 		maxConcurrent: maxConcurrent,
+		skillsPrompt:  skillsPrompt,
 		swarms:        make(map[string]*swarm.Swarm),
 		results:       make(map[string]*solver.Result),
 		solved:        make(map[string]bool),
@@ -115,6 +122,9 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	}
 
 	sysPrompt := prompt.Build(meta, filepath.Join(dir, "distfiles"), filepath.Join(dir, "workspace"))
+	if c.skillsPrompt != "" {
+		sysPrompt += "\n\n" + c.skillsPrompt
+	}
 
 	log.Printf("[coordinator] Starting swarm for %s (%s)", challenge, meta.Category)
 	sw := swarm.New(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage)

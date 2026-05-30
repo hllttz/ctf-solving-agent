@@ -15,7 +15,7 @@ type Config struct {
 	GeminiAPIKey    string
 	DeepSeekAPIKey  string
 
-	SandboxImage string
+	SandboxImage  string
 	MaxConcurrent int
 	MemoryLimit   string
 
@@ -24,6 +24,7 @@ type Config struct {
 	CoordinatorBackend string
 	SingleChallenge    string
 	ChallengesDir      string
+	SkillsDir          string
 	NoSubmit           bool
 	Verbose            bool
 }
@@ -50,6 +51,7 @@ func Load() *Config {
 		CoordinatorModel:   getEnv("COORDINATOR_MODEL", "claude-sdk/claude-opus-4-6"),
 		CoordinatorBackend: getEnv("COORDINATOR_BACKEND", "claude"),
 		ChallengesDir:      getEnv("CHALLENGES_DIR", "./challenges"),
+		SkillsDir:          getEnv("SKILLS_DIR", "./skills"),
 		NoSubmit:           getEnvBool("NO_SUBMIT", false),
 		Verbose:            getEnvBool("VERBOSE", false),
 	}
