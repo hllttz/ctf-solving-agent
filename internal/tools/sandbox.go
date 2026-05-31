@@ -68,7 +68,11 @@ func (t *ReadFileTool) InvokableRun(_ context.Context, argsJSON string, _ ...too
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
-	return t.sb.ReadFile(args.Path)
+	content, err := t.sb.ReadFile(args.Path)
+	if err != nil {
+		return fmt.Sprintf("read_file failed for %q: %v\nTry list_files on the parent directory or use bash to inspect the path.", args.Path, err), nil
+	}
+	return content, nil
 }
 
 // WriteFileTool writes content to files in the sandbox workspace.
