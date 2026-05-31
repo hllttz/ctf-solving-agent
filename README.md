@@ -176,7 +176,7 @@ export MSG_ADDR=127.0.0.1:0
 - `CONTAINER_MEMORY_LIMIT`：每个 solver 容器的内存限制。
 - `MAX_CONCURRENT_CHALLENGES`：同时求解的题目数量上限。
 - `MODEL_SPECS`：逗号分隔的 solver 模型列表。
-- `SKILLS_DIR`：额外 prompt 技能目录，会拼接到题目 prompt 后。
+- `SKILLS_DIR`：额外 prompt 技能目录。每道题只会注入 `common.md` 和匹配题目分类的 `{category}.md`。
 - `MSG_ADDR`：operator HTTP 服务监听地址，默认随机端口。
 
 ## Operator 接口

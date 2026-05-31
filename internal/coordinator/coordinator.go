@@ -12,6 +12,7 @@ import (
 
 	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/prompt"
+	"github.com/verialabs/ctf-agent/internal/skills"
 	"github.com/verialabs/ctf-agent/internal/solver"
 	"github.com/verialabs/ctf-agent/internal/swarm"
 )
@@ -24,7 +25,7 @@ type Coordinator struct {
 	sandboxImage  string
 	memoryLimit   string
 	maxConcurrent int
-	skillsPrompt  string
+	skillsDir     string
 	costs         *cost.Tracker
 
 	mu      sync.Mutex
@@ -39,17 +40,17 @@ func New(challengesDir string, modelSpecs []string, apiKeys map[string]string, s
 	return NewWithOptions(challengesDir, modelSpecs, apiKeys, sandboxImage, "16g", maxConcurrent, "")
 }
 
-// NewWithSkills creates a coordinator with optional prompt skill content.
-func NewWithSkills(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int, skillsPrompt string) *Coordinator {
-	return NewWithOptions(challengesDir, modelSpecs, apiKeys, sandboxImage, "16g", maxConcurrent, skillsPrompt)
+// NewWithSkills creates a coordinator with optional skill directory.
+func NewWithSkills(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage string, maxConcurrent int, skillsDir string) *Coordinator {
+	return NewWithOptions(challengesDir, modelSpecs, apiKeys, sandboxImage, "16g", maxConcurrent, skillsDir)
 }
 
 // NewWithOptions creates a coordinator with sandbox and prompt options.
-func NewWithOptions(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsPrompt string) *Coordinator {
-	return NewWithOptionsAndTracker(challengesDir, modelSpecs, apiKeys, sandboxImage, memoryLimit, maxConcurrent, skillsPrompt, nil)
+func NewWithOptions(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsDir string) *Coordinator {
+	return NewWithOptionsAndTracker(challengesDir, modelSpecs, apiKeys, sandboxImage, memoryLimit, maxConcurrent, skillsDir, nil)
 }
 
-func NewWithOptionsAndTracker(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsPrompt string, costs *cost.Tracker) *Coordinator {
+func NewWithOptionsAndTracker(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsDir string, costs *cost.Tracker) *Coordinator {
 	return &Coordinator{
 		challengesDir: challengesDir,
 		modelSpecs:    modelSpecs,
@@ -57,7 +58,7 @@ func NewWithOptionsAndTracker(challengesDir string, modelSpecs []string, apiKeys
 		sandboxImage:  sandboxImage,
 		memoryLimit:   memoryLimit,
 		maxConcurrent: maxConcurrent,
-		skillsPrompt:  skillsPrompt,
+		skillsDir:     skillsDir,
 		costs:         costs,
 		swarms:        make(map[string]*swarm.Swarm),
 		results:       make(map[string]*solver.Result),
@@ -157,8 +158,12 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	}
 
 	sysPrompt := prompt.Build(meta, filepath.Join(dir, "distfiles"), filepath.Join(dir, "workspace"))
-	if c.skillsPrompt != "" {
-		sysPrompt += "\n\n" + c.skillsPrompt
+	skillsPrompt, err := skills.LoadForCategory(c.skillsDir, meta.Category)
+	if err != nil {
+		return &solver.Result{Status: solver.Error, Findings: []string{fmt.Sprintf("load skills: %v", err)}}
+	}
+	if skillsPrompt != "" {
+		sysPrompt += "\n\n" + skillsPrompt
 	}
 
 	log.Printf("[coordinator] Starting swarm for %s (%s)", challenge, meta.Category)

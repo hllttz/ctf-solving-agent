@@ -76,17 +76,13 @@ func solveCmd(cfg *config.Config) *cobra.Command {
 			}()
 
 			costTracker := cost.NewTracker()
-			skillsPrompt, err := skills.LoadDir(cfg.SkillsDir)
-			if err != nil {
-				return err
-			}
 			if err := sandbox.CleanupOrphans(ctx); err != nil {
 				log.Printf("sandbox cleanup skipped: %v", err)
 			}
 
 			printRunHeader("Solving challenge directory", challengesDir, cfg.ModelSpecs, cfg.SandboxImage, cfg.MemoryLimit)
 			coord := coordinator.NewWithOptionsAndTracker(challengesDir,
-				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit, cfg.MaxConcurrent, skillsPrompt, costTracker)
+				cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit, cfg.MaxConcurrent, cfg.SkillsDir, costTracker)
 			if url, err := coord.StartOperatorServer(ctx, cfg.MsgAddr); err != nil {
 				log.Printf("operator message server disabled: %v", err)
 			} else {
@@ -170,7 +166,7 @@ func runSingleChallenge(cfg *config.Config, challengeDir string) error {
 	sysPrompt := prompt.Build(meta,
 		filepath.Join(challengeDir, "distfiles"),
 		filepath.Join(challengeDir, "workspace"))
-	skillsPrompt, err := skills.LoadDir(cfg.SkillsDir)
+	skillsPrompt, err := skills.LoadForCategory(cfg.SkillsDir, meta.Category)
 	if err != nil {
 		return err
 	}
