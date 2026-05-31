@@ -20,6 +20,7 @@ Reverse engineering
 
 Crypto
 - python3 with pycryptodome, z3-solver, gmpy2, sympy, numpy, scipy
+- sage for finite fields, elliptic curves, polynomial rings, lattices, LLL, and Coppersmith-style attacks
 - openssl, hashcat, john
 
 Forensics / stego

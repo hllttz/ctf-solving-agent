@@ -73,26 +73,18 @@ hints:
 只有附件和靶机地址时，直接使用 `run`：
 
 ```bash
-go run ./cmd/ctf-agent run \
-  --target "nc host 31337" \
-  --file ./chall.zip \
-  --category pwn \
-  --name baby-pwn
+go run ./cmd/ctf-agent run --target "nc host 31337" --file ./chall.zip --category pwn --name baby-pwn
 ```
 
 Web 题目：
 
 ```bash
-go run ./cmd/ctf-agent run \
-  --target "http://host:8080" \
-  --file ./source.zip \
-  --category web \
-  --name baby-web
+go run ./cmd/ctf-agent run --target "http://host:8080" --file ./source.zip --category web --name baby-web
 ```
 
 `run` 会在 `CHALLENGES_DIR`，默认 `./challenges`，下创建题目目录，复制附件到 `distfiles/`，写入 `metadata.yml`，然后启动求解。
 
-在交互式终端里，如果缺少 `--target`、`--file`、`--name` 等参数，程序会提示输入；非交互环境不会提示。
+`run` 不会进入交互式输入；靶机地址用 `--target` 传入，附件用 `--file` 传入。
 
 ### 2. 求解单个已有题目
 
@@ -176,7 +168,7 @@ export MSG_ADDR=127.0.0.1:0
 - `CONTAINER_MEMORY_LIMIT`：每个 solver 容器的内存限制。
 - `MAX_CONCURRENT_CHALLENGES`：同时求解的题目数量上限。
 - `MODEL_SPECS`：逗号分隔的 solver 模型列表。
-- `SKILLS_DIR`：额外 prompt 技能目录，会拼接到题目 prompt 后。
+- `SKILLS_DIR`：额外 prompt 技能目录。每道题只会注入 `common.md` 和匹配题目分类的 `{category}.md`。
 - `MSG_ADDR`：operator HTTP 服务监听地址，默认随机端口。
 
 ## Operator 接口

@@ -10,6 +10,20 @@ import (
 
 // LoadDir reads markdown skills from dir and returns prompt-ready content.
 func LoadDir(dir string) (string, error) {
+	return loadSelected(dir, nil)
+}
+
+// LoadForCategory reads common.md and the markdown skill matching category.
+func LoadForCategory(dir, category string) (string, error) {
+	selected := map[string]bool{"common.md": true}
+	category = strings.ToLower(strings.TrimSpace(category))
+	if category != "" {
+		selected[category+".md"] = true
+	}
+	return loadSelected(dir, selected)
+}
+
+func loadSelected(dir string, selected map[string]bool) (string, error) {
 	if strings.TrimSpace(dir) == "" {
 		return "", nil
 	}
@@ -32,6 +46,9 @@ func LoadDir(dir string) (string, error) {
 			continue
 		}
 		if strings.HasSuffix(strings.ToLower(name), ".md") {
+			if selected != nil && !selected[strings.ToLower(name)] {
+				continue
+			}
 			names = append(names, name)
 		}
 	}
