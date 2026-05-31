@@ -27,6 +27,7 @@ func (c *Coordinator) StartOperatorServer(ctx context.Context, addr string) (str
 	mux.HandleFunc("/broadcast", c.handleOperatorBroadcast)
 	mux.HandleFunc("/kill", c.handleOperatorKill)
 	mux.HandleFunc("/bump", c.handleOperatorBump)
+	mux.HandleFunc("/spawn", c.handleOperatorSpawn)
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -79,6 +80,9 @@ func (c *Coordinator) handleOperatorStatus(w http.ResponseWriter, _ *http.Reques
 	writeJSON(w, map[string]any{
 		"summary":           c.Summary(),
 		"active_challenges": active,
+		"results":           c.Results(),
+		"total_cost_usd":    c.TotalCost(),
+		"usage":             c.CostSnapshot(),
 	})
 }
 
@@ -172,6 +176,34 @@ func (c *Coordinator) handleOperatorBump(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (c *Coordinator) handleOperatorSpawn(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Challenge string `json:"challenge"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	challenge := strings.TrimSpace(body.Challenge)
+	if challenge == "" {
+		http.Error(w, "challenge is required", http.StatusBadRequest)
+		return
+	}
+	if _, err := os.Stat(filepath.Join(c.challengesDir, challenge, "metadata.yml")); err != nil {
+		http.Error(w, "local challenge metadata not found", http.StatusNotFound)
+		return
+	}
+	if !c.Spawn(nil, challenge) {
+		http.Error(w, "challenge already running or invalid", http.StatusConflict)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "challenge": challenge})
 }
 
 // Broadcast sends a coordinator message to all currently known swarms.

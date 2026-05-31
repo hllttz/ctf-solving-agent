@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
@@ -29,23 +30,31 @@ func newOpenAIModel(spec, apiKey string) (model.ToolCallingChatModel, error) {
 		provider: &openaiProvider{
 			modelID: modelID,
 			apiKey:  apiKey,
-			baseURL: "https://api.openai.com/v1/chat/completions",
+			baseURL: openAIBaseURL(),
 		},
 	}, nil
 }
 
+func openAIBaseURL() string {
+	baseURL := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
+	if baseURL == "" {
+		return "https://api.openai.com/v1/chat/completions"
+	}
+	return baseURL
+}
+
 type openaiMessage struct {
-	Role       string        `json:"role"`
-	Content    interface{}   `json:"content"`
-	Name       string        `json:"name,omitempty"`
-	ToolCallID string        `json:"tool_call_id,omitempty"`
-	ToolCalls  []openaiTC    `json:"tool_calls,omitempty"`
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content"`
+	Name       string      `json:"name,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+	ToolCalls  []openaiTC  `json:"tool_calls,omitempty"`
 }
 
 type openaiTC struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function openaiFunc   `json:"function"`
+	ID       string     `json:"id"`
+	Type     string     `json:"type"`
+	Function openaiFunc `json:"function"`
 }
 
 type openaiFunc struct {
@@ -54,8 +63,8 @@ type openaiFunc struct {
 }
 
 type openaiTool struct {
-	Type     string            `json:"type"`
-	Function openaiToolFunc    `json:"function"`
+	Type     string         `json:"type"`
+	Function openaiToolFunc `json:"function"`
 }
 
 type openaiToolFunc struct {
@@ -65,11 +74,11 @@ type openaiToolFunc struct {
 }
 
 type openaiRequest struct {
-	Model     string         `json:"model"`
+	Model     string          `json:"model"`
 	Messages  []openaiMessage `json:"messages"`
-	Tools     []openaiTool   `json:"tools,omitempty"`
-	MaxTokens int            `json:"max_tokens,omitempty"`
-	Stream    bool           `json:"stream"`
+	Tools     []openaiTool    `json:"tools,omitempty"`
+	MaxTokens int             `json:"max_tokens,omitempty"`
+	Stream    bool            `json:"stream"`
 }
 
 type openaiResponse struct {
@@ -79,14 +88,26 @@ type openaiResponse struct {
 			Content   interface{} `json:"content"`
 			ToolCalls []openaiTC  `json:"tool_calls"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *struct {
+		PromptTokens       int `json:"prompt_tokens"`
+		CompletionTokens   int `json:"completion_tokens"`
+		TotalTokens        int `json:"total_tokens"`
+		PromptTokenDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+		CompletionTokenDetails *struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		} `json:"completion_tokens_details"`
+	} `json:"usage,omitempty"`
 }
 
 type openaiStreamChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content   string      `json:"content"`
-			ToolCalls []openaiTC  `json:"tool_calls"`
+			Content   string     `json:"content"`
+			ToolCalls []openaiTC `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -217,11 +238,11 @@ func (tc openaiTC) Index() int {
 
 func (p *openaiProvider) buildRequest(messages []*schema.Message, tools []*schema.ToolInfo, stream bool) ([]byte, error) {
 	req := openaiRequest{
-		Model:    p.modelID,
+		Model:     p.modelID,
 		MaxTokens: 16000,
-		Stream:   stream,
-		Messages: convertToOpenAIMessages(messages),
-		Tools:    convertToOpenAITools(tools),
+		Stream:    stream,
+		Messages:  convertToOpenAIMessages(messages),
+		Tools:     convertToOpenAITools(tools),
 	}
 	return json.Marshal(req)
 }
@@ -303,7 +324,7 @@ func convertToOpenAIMessages(msgs []*schema.Message) []openaiMessage {
 
 func convertOpenAIResponse(resp *openaiResponse) *schema.Message {
 	if len(resp.Choices) == 0 {
-		return &schema.Message{Role: schema.Assistant}
+		return openAIMessageWithMeta(&schema.Message{Role: schema.Assistant}, resp, "")
 	}
 	choice := resp.Choices[0]
 	msg := &schema.Message{Role: schema.Assistant}
@@ -319,6 +340,28 @@ func convertOpenAIResponse(resp *openaiResponse) *schema.Message {
 				Arguments: tc.Function.Arguments,
 			},
 		})
+	}
+	return openAIMessageWithMeta(msg, resp, choice.FinishReason)
+}
+
+func openAIMessageWithMeta(msg *schema.Message, resp *openaiResponse, finishReason string) *schema.Message {
+	if finishReason == "" && resp == nil {
+		return msg
+	}
+	msg.ResponseMeta = &schema.ResponseMeta{FinishReason: finishReason}
+	if resp != nil && resp.Usage != nil {
+		usage := &schema.TokenUsage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		}
+		if resp.Usage.PromptTokenDetails != nil {
+			usage.PromptTokenDetails.CachedTokens = resp.Usage.PromptTokenDetails.CachedTokens
+		}
+		if resp.Usage.CompletionTokenDetails != nil {
+			usage.CompletionTokensDetails.ReasoningTokens = resp.Usage.CompletionTokenDetails.ReasoningTokens
+		}
+		msg.ResponseMeta.Usage = usage
 	}
 	return msg
 }

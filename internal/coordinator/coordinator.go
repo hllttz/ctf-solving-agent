@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/prompt"
 	"github.com/verialabs/ctf-agent/internal/solver"
 	"github.com/verialabs/ctf-agent/internal/swarm"
@@ -24,11 +25,13 @@ type Coordinator struct {
 	memoryLimit   string
 	maxConcurrent int
 	skillsPrompt  string
+	costs         *cost.Tracker
 
 	mu      sync.Mutex
 	swarms  map[string]*swarm.Swarm
 	results map[string]*solver.Result
 	solved  map[string]bool
+	ctx     context.Context
 }
 
 // New creates a new coordinator.
@@ -43,6 +46,10 @@ func NewWithSkills(challengesDir string, modelSpecs []string, apiKeys map[string
 
 // NewWithOptions creates a coordinator with sandbox and prompt options.
 func NewWithOptions(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsPrompt string) *Coordinator {
+	return NewWithOptionsAndTracker(challengesDir, modelSpecs, apiKeys, sandboxImage, memoryLimit, maxConcurrent, skillsPrompt, nil)
+}
+
+func NewWithOptionsAndTracker(challengesDir string, modelSpecs []string, apiKeys map[string]string, sandboxImage, memoryLimit string, maxConcurrent int, skillsPrompt string, costs *cost.Tracker) *Coordinator {
 	return &Coordinator{
 		challengesDir: challengesDir,
 		modelSpecs:    modelSpecs,
@@ -51,6 +58,7 @@ func NewWithOptions(challengesDir string, modelSpecs []string, apiKeys map[strin
 		memoryLimit:   memoryLimit,
 		maxConcurrent: maxConcurrent,
 		skillsPrompt:  skillsPrompt,
+		costs:         costs,
 		swarms:        make(map[string]*swarm.Swarm),
 		results:       make(map[string]*solver.Result),
 		solved:        make(map[string]bool),
@@ -80,6 +88,7 @@ func (c *Coordinator) DiscoverChallenges() ([]string, error) {
 
 // SolveAll runs swarms for all challenges, limited by maxConcurrent.
 func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
+	c.setContext(ctx)
 	challenges, err := c.DiscoverChallenges()
 	if err != nil {
 		log.Printf("[coordinator] discover: %v", err)
@@ -120,6 +129,24 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 	return out
 }
 
+func (c *Coordinator) setContext(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	c.mu.Lock()
+	c.ctx = ctx
+	c.mu.Unlock()
+}
+
+func (c *Coordinator) context() context.Context {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ctx != nil {
+		return c.ctx
+	}
+	return context.Background()
+}
+
 func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Result {
 	dir := filepath.Join(c.challengesDir, challenge)
 	metaPath := filepath.Join(dir, "metadata.yml")
@@ -135,7 +162,7 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	}
 
 	log.Printf("[coordinator] Starting swarm for %s (%s)", challenge, meta.Category)
-	sw := swarm.NewWithStrategy(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage, c.memoryLimit, initialStrategy(meta))
+	sw := swarm.NewWithOptionsAndTracker(challenge, dir, c.modelSpecs, c.apiKeys, c.sandboxImage, c.memoryLimit, initialStrategy(meta), c.costs)
 	c.mu.Lock()
 	c.swarms[challenge] = sw
 	c.mu.Unlock()
@@ -143,6 +170,35 @@ func (c *Coordinator) solveOne(ctx context.Context, challenge string) *solver.Re
 	result := sw.Run(ctx, sysPrompt)
 	log.Printf("[coordinator] Challenge %s: status=%d flag=%s", challenge, result.Status, result.Flag)
 	return result
+}
+
+func (c *Coordinator) Spawn(ctx context.Context, challenge string) bool {
+	if ctx == nil {
+		ctx = c.context()
+	} else {
+		c.setContext(ctx)
+	}
+	challenge = strings.TrimSpace(challenge)
+	if challenge == "" {
+		return false
+	}
+	c.mu.Lock()
+	if sw := c.swarms[challenge]; sw != nil {
+		c.mu.Unlock()
+		return false
+	}
+	c.mu.Unlock()
+
+	go func() {
+		result := c.solveOne(ctx, challenge)
+		c.mu.Lock()
+		c.results[challenge] = result
+		if result.Status == solver.FlagFound {
+			c.solved[challenge] = true
+		}
+		c.mu.Unlock()
+	}()
+	return true
 }
 
 func initialStrategy(meta *prompt.Meta) string {
@@ -192,4 +248,18 @@ func (c *Coordinator) Results() map[string]*solver.Result {
 		out[k] = v
 	}
 	return out
+}
+
+func (c *Coordinator) CostSnapshot() map[string]cost.Usage {
+	if c.costs == nil {
+		return map[string]cost.Usage{}
+	}
+	return c.costs.Snapshot()
+}
+
+func (c *Coordinator) TotalCost() float64 {
+	if c.costs == nil {
+		return 0
+	}
+	return c.costs.TotalCost()
 }

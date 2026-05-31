@@ -2,24 +2,25 @@ package cost
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 )
 
 // Prices in USD per 1M tokens (input / output).
 var modelPrices = map[string][2]float64{
-	"claude-opus-4-6":     {15.0, 75.0},
-	"claude-sonnet-4-6":   {3.0, 15.0},
-	"claude-haiku-4-5":    {0.80, 4.0},
-	"gpt-5.4":             {1.25, 10.0},
-	"gpt-5.4-mini":        {0.15, 0.60},
-	"gpt-5.3-codex":       {2.50, 10.0},
-	"gemini-2.5-pro":      {1.25, 10.0},
+	"claude-opus-4-6":   {15.0, 75.0},
+	"claude-sonnet-4-6": {3.0, 15.0},
+	"claude-haiku-4-5":  {0.80, 4.0},
+	"gpt-5.4":           {1.25, 10.0},
+	"gpt-5.4-mini":      {0.15, 0.60},
+	"gpt-5.3-codex":     {2.50, 10.0},
+	"gemini-2.5-pro":    {1.25, 10.0},
 }
 
 // Usage accumulates token counts and cost for a model.
 type Usage struct {
-	Model       string
-	InputTokens int
+	Model        string
+	InputTokens  int
 	OutputTokens int
 	CacheTokens  int
 }
@@ -60,6 +61,17 @@ func (t *Tracker) Record(agent, model string, inputTokens, outputTokens, cacheTo
 	u.CacheTokens += cacheTokens
 }
 
+func (t *Tracker) Snapshot() map[string]Usage {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	out := make(map[string]Usage, len(t.usage))
+	for key, usage := range t.usage {
+		out[key] = *usage
+	}
+	return out
+}
+
 // Summary returns a formatted cost summary.
 func (t *Tracker) Summary() string {
 	t.mu.Lock()
@@ -70,7 +82,14 @@ func (t *Tracker) Summary() string {
 	totalOutput := 0
 	result := "Cost Summary\n============\n"
 
-	for key, u := range t.usage {
+	keys := make([]string, 0, len(t.usage))
+	for key := range t.usage {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		u := t.usage[key]
 		c := u.Cost()
 		totalCost += c
 		totalInput += u.InputTokens

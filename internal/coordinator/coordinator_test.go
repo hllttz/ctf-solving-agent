@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,5 +92,14 @@ func TestKillAndBumpMissingChallenge(t *testing.T) {
 	}
 	if c.Bump("missing", "model", "insight") {
 		t.Fatal("expected bump false")
+	}
+}
+
+func TestSpawnRejectsAlreadyRunningChallenge(t *testing.T) {
+	c := NewWithOptions("", nil, nil, "", "", 1, "")
+	c.swarms["challenge"] = swarm.NewWithOptions("challenge", "", nil, nil, "", "")
+
+	if c.Spawn(context.Background(), "challenge") {
+		t.Fatal("expected spawn false")
 	}
 }

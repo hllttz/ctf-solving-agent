@@ -79,6 +79,29 @@ func (t *Tracer) LogEvent(eventType, agent, challenge string, step int, tool str
 	t.file.Sync()
 }
 
+func (t *Tracer) LogUsage(agent, challenge string, step int, input, output, cache int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	evt := Event{
+		Timestamp: time.Now(),
+		Type:      "usage",
+		Agent:     agent,
+		Challenge: challenge,
+		Step:      step,
+		Tokens: &TokenUsage{
+			Input:  input,
+			Output: output,
+			Cache:  cache,
+		},
+	}
+
+	b, _ := json.Marshal(evt)
+	t.file.Write(b)
+	t.file.Write([]byte("\n"))
+	t.file.Sync()
+}
+
 // LogTool records a tool call event.
 func (t *Tracer) LogTool(agent, challenge, toolName, input, output string) {
 	t.LogEvent("tool", agent, challenge, 0, toolName, map[string]any{

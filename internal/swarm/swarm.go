@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/verialabs/ctf-agent/internal/bus"
+	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/models"
 	"github.com/verialabs/ctf-agent/internal/sandbox"
 	"github.com/verialabs/ctf-agent/internal/solver"
@@ -23,6 +24,7 @@ type Swarm struct {
 	sandboxImage  string
 	memoryLimit   string
 	strategyHint  string
+	costs         *cost.Tracker
 
 	bus *bus.MessageBus
 
@@ -49,6 +51,10 @@ func NewWithOptions(name, dir string, modelSpecs []string, apiKeys map[string]st
 }
 
 func NewWithStrategy(name, dir string, modelSpecs []string, apiKeys map[string]string, image, memoryLimit, strategyHint string) *Swarm {
+	return NewWithOptionsAndTracker(name, dir, modelSpecs, apiKeys, image, memoryLimit, strategyHint, nil)
+}
+
+func NewWithOptionsAndTracker(name, dir string, modelSpecs []string, apiKeys map[string]string, image, memoryLimit, strategyHint string, costs *cost.Tracker) *Swarm {
 	return &Swarm{
 		challengeName: name,
 		challengeDir:  dir,
@@ -57,6 +63,7 @@ func NewWithStrategy(name, dir string, modelSpecs []string, apiKeys map[string]s
 		sandboxImage:  image,
 		memoryLimit:   memoryLimit,
 		strategyHint:  strategyHint,
+		costs:         costs,
 		bus:           bus.New(),
 		solvers:       make(map[string]*solver.Solver),
 		done:          make(chan struct{}),
@@ -100,7 +107,7 @@ func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 		sandboxes = append(sandboxes, sb)
 
 		inst := solverInst{
-			s:       solver.NewWithNameForChallenge(m, sb, s.bus, spec, s.challengeName),
+			s:       solver.NewWithOptions(m, sb, s.bus, spec, s.challengeName, s.costs),
 			sb:      sb,
 			modelID: spec,
 		}
@@ -271,9 +278,17 @@ func (s *Swarm) Status() map[string]any {
 
 	agents := make(map[string]any, len(s.solvers))
 	for spec, sol := range s.solvers {
-		agents[spec] = map[string]any{
+		agent := map[string]any{
 			"history_len": len(sol.History()),
 		}
+		if s.costs != nil {
+			key := spec + "/" + sol.ModelID()
+			if usage, ok := s.costs.Snapshot()[key]; ok {
+				agent["usage"] = usage
+				agent["cost_usd"] = usage.Cost()
+			}
+		}
+		agents[spec] = agent
 	}
 	return map[string]any{
 		"challenge": s.challengeName,

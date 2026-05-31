@@ -18,6 +18,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/verialabs/ctf-agent/internal/bus"
+	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/loopdetect"
 	"github.com/verialabs/ctf-agent/internal/models"
 	"github.com/verialabs/ctf-agent/internal/sandbox"
@@ -61,6 +62,7 @@ type Solver struct {
 	messages  []*schema.Message
 	tracer    *trace.Tracer
 	reporter  *sandboxTools.FlagReporter
+	costs     *cost.Tracker
 	stepCount int
 	mu        sync.Mutex
 }
@@ -75,6 +77,10 @@ func NewWithName(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.Messag
 }
 
 func NewWithNameForChallenge(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus, agentName, challenge string) *Solver {
+	return NewWithOptions(m, sb, b, agentName, challenge, nil)
+}
+
+func NewWithOptions(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus, agentName, challenge string, costs *cost.Tracker) *Solver {
 	tracer, err := trace.NewSolverTracer("logs", challenge, agentName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "trace disabled for %s: %v\n", agentName, err)
@@ -90,6 +96,7 @@ func NewWithNameForChallenge(m model.ToolCallingChatModel, sb sandbox.Sandbox, b
 		modelInfo: models.InspectSpec(agentName),
 		tracer:    tracer,
 		reporter:  sandboxTools.NewFlagReporter(),
+		costs:     costs,
 	}
 }
 
@@ -152,6 +159,7 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 		return nil, fmt.Errorf("agent run: %w", err)
 	}
 	s.recordTurn(input, output)
+	_, _, _, turnCost := s.recordUsage(output)
 	s.traceEvent("model_response", s.currentStep(), "", map[string]any{
 		"text": truncateString(output.Content, 2000),
 	})
@@ -161,6 +169,7 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 		Steps:    s.currentStep(),
 		Findings: []string{output.Content},
 		LogPath:  s.tracePath(),
+		Cost:     turnCost,
 	}
 	_ = startTime
 
@@ -190,6 +199,31 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	})
 
 	return result, nil
+}
+
+func (s *Solver) recordUsage(output *schema.Message) (inputTokens, outputTokens, cacheTokens int, costUSD float64) {
+	if output == nil || output.ResponseMeta == nil || output.ResponseMeta.Usage == nil {
+		return 0, 0, 0, 0
+	}
+	usage := output.ResponseMeta.Usage
+	inputTokens = usage.PromptTokens
+	outputTokens = usage.CompletionTokens
+	cacheTokens = usage.PromptTokenDetails.CachedTokens
+	u := cost.Usage{
+		Model:        s.modelInfo.ModelID,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+		CacheTokens:  cacheTokens,
+	}
+	costUSD = u.Cost()
+	if s.costs != nil {
+		s.costs.Record(s.agentName, s.modelInfo.ModelID, inputTokens, outputTokens, cacheTokens)
+	}
+	if s.tracer != nil {
+		s.tracer.LogUsage(s.agentName, s.challenge, s.currentStep(), inputTokens, outputTokens, cacheTokens)
+	}
+	log.Printf("[%s/%s] usage in=%d cached=%d out=%d cost=$%.4f", s.challenge, s.agentName, inputTokens, cacheTokens, outputTokens, costUSD)
+	return inputTokens, outputTokens, cacheTokens, costUSD
 }
 
 // Bump injects insights from sibling solvers as a new message and re-runs.
@@ -562,6 +596,10 @@ func extractFlag(text string) string {
 // History exposes the detector history for debugging.
 func (s *Solver) History() []string {
 	return s.detector.History()
+}
+
+func (s *Solver) ModelID() string {
+	return s.modelInfo.ModelID
 }
 
 func truncateString(s string, n int) string {

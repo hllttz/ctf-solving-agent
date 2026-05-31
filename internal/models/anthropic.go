@@ -35,8 +35,8 @@ func newAnthropicModel(spec, apiKey string) (model.ToolCallingChatModel, error) 
 }
 
 type anthropicMessage struct {
-	Role    string              `json:"role"`
-	Content []anthropicContent  `json:"content"`
+	Role    string             `json:"role"`
+	Content []anthropicContent `json:"content"`
 }
 
 type anthropicContent struct {
@@ -62,20 +62,20 @@ type anthropicTool struct {
 }
 
 type anthropicRequest struct {
-	Model     string              `json:"model"`
-	MaxTokens int                 `json:"max_tokens"`
-	Messages  []anthropicMessage  `json:"messages"`
-	Tools     []anthropicTool     `json:"tools,omitempty"`
-	Stream    bool                `json:"stream"`
+	Model     string             `json:"model"`
+	MaxTokens int                `json:"max_tokens"`
+	Messages  []anthropicMessage `json:"messages"`
+	Tools     []anthropicTool    `json:"tools,omitempty"`
+	Stream    bool               `json:"stream"`
 }
 
 type anthropicResponse struct {
 	Content []struct {
-		Type      string          `json:"type"`
-		Text      string          `json:"text"`
-		Name      string          `json:"name"`
-		Input     json.RawMessage `json:"input"`
-		ID        string          `json:"id"`
+		Type  string          `json:"type"`
+		Text  string          `json:"text"`
+		Name  string          `json:"name"`
+		Input json.RawMessage `json:"input"`
+		ID    string          `json:"id"`
 	} `json:"content"`
 	StopReason string `json:"stop_reason"`
 	Usage      struct {
@@ -85,11 +85,11 @@ type anthropicResponse struct {
 }
 
 type anthropicStreamEvent struct {
-	Type    string `json:"type"`
-	Delta   *struct {
-		Type       string          `json:"type"`
-		Text       string          `json:"text"`
-		PartialJSON string         `json:"partial_json"`
+	Type  string `json:"type"`
+	Delta *struct {
+		Type        string `json:"type"`
+		Text        string `json:"text"`
+		PartialJSON string `json:"partial_json"`
 	} `json:"delta"`
 	ContentBlock *struct {
 		Type string `json:"type"`
@@ -148,9 +148,9 @@ func (p *anthropicProvider) Stream(ctx context.Context, messages []*schema.Messa
 
 		// Track tool call accumulation state
 		var (
-			toolUseAccum  []toolCallAccum
-			currentText   string
-			textSent      bool
+			toolUseAccum []toolCallAccum
+			currentText  string
+			textSent     bool
 		)
 
 		for scanner.Scan() {
@@ -346,7 +346,17 @@ func convertToAnthropicMessages(msgs []*schema.Message) []anthropicMessage {
 }
 
 func convertAnthropicResponse(resp *anthropicResponse) *schema.Message {
-	msg := &schema.Message{Role: schema.Assistant}
+	msg := &schema.Message{
+		Role: schema.Assistant,
+		ResponseMeta: &schema.ResponseMeta{
+			FinishReason: resp.StopReason,
+			Usage: &schema.TokenUsage{
+				PromptTokens:     resp.Usage.InputTokens,
+				CompletionTokens: resp.Usage.OutputTokens,
+				TotalTokens:      resp.Usage.InputTokens + resp.Usage.OutputTokens,
+			},
+		},
+	}
 	for _, c := range resp.Content {
 		switch c.Type {
 		case "text":

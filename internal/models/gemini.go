@@ -34,13 +34,13 @@ func newGeminiModel(spec, apiKey string) (model.ToolCallingChatModel, error) {
 }
 
 type geminiContent struct {
-	Role  string        `json:"role,omitempty"`
-	Parts []geminiPart  `json:"parts"`
+	Role  string       `json:"role,omitempty"`
+	Parts []geminiPart `json:"parts"`
 }
 
 type geminiPart struct {
-	Text       string `json:"text,omitempty"`
-	FunctionCall  *geminiFC `json:"functionCall,omitempty"`
+	Text             string    `json:"text,omitempty"`
+	FunctionCall     *geminiFC `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFR `json:"functionResponse,omitempty"`
 }
 
@@ -68,9 +68,9 @@ type geminiFD struct {
 }
 
 type geminiRequest struct {
-	Contents         []geminiContent  `json:"contents"`
-	Tools            []geminiTool     `json:"tools,omitempty"`
-	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent  `json:"contents"`
+	Tools             []geminiTool     `json:"tools,omitempty"`
+	SystemInstruction *geminiContent   `json:"systemInstruction,omitempty"`
 	GenerationConfig  *geminiGenConfig `json:"generationConfig,omitempty"`
 }
 
@@ -84,7 +84,14 @@ type geminiResponse struct {
 			Role  string       `json:"role"`
 			Parts []geminiPart `json:"parts"`
 		} `json:"content"`
+		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
+	UsageMetadata *struct {
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
+		TotalTokenCount         int `json:"totalTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+	} `json:"usageMetadata,omitempty"`
 }
 
 func (p *geminiProvider) Generate(ctx context.Context, messages []*schema.Message, tools []*schema.ToolInfo) (*schema.Message, error) {
@@ -225,9 +232,25 @@ func convertToGeminiContent(msg *schema.Message) geminiContent {
 
 func convertGeminiResponse(resp *geminiResponse) *schema.Message {
 	msg := &schema.Message{Role: schema.Assistant}
+	if resp.UsageMetadata != nil {
+		msg.ResponseMeta = &schema.ResponseMeta{
+			Usage: &schema.TokenUsage{
+				PromptTokens:     resp.UsageMetadata.PromptTokenCount,
+				CompletionTokens: resp.UsageMetadata.CandidatesTokenCount,
+				TotalTokens:      resp.UsageMetadata.TotalTokenCount,
+				PromptTokenDetails: schema.PromptTokenDetails{
+					CachedTokens: resp.UsageMetadata.CachedContentTokenCount,
+				},
+			},
+		}
+	}
 	if len(resp.Candidates) == 0 {
 		return msg
 	}
+	if msg.ResponseMeta == nil {
+		msg.ResponseMeta = &schema.ResponseMeta{}
+	}
+	msg.ResponseMeta.FinishReason = resp.Candidates[0].FinishReason
 	for _, part := range resp.Candidates[0].Content.Parts {
 		if part.Text != "" {
 			msg.Content += part.Text
