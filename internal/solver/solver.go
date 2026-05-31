@@ -237,6 +237,11 @@ func (s *Solver) emitCommentary(msg *schema.Message) {
 	}
 	text := strings.TrimSpace(msg.Content)
 	if text == "" {
+		if len(msg.ToolCalls) > 0 {
+			s.traceEvent("commentary_empty", s.currentStep(), "", map[string]any{
+				"tool_calls": len(msg.ToolCalls),
+			})
+		}
 		return
 	}
 	s.traceEvent("commentary", s.currentStep(), "", map[string]any{

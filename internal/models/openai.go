@@ -328,9 +328,7 @@ func convertOpenAIResponse(resp *openaiResponse) *schema.Message {
 	}
 	choice := resp.Choices[0]
 	msg := &schema.Message{Role: schema.Assistant}
-	if s, ok := choice.Message.Content.(string); ok {
-		msg.Content = s
-	}
+	msg.Content = openAIContentText(choice.Message.Content)
 	for _, tc := range choice.Message.ToolCalls {
 		msg.ToolCalls = append(msg.ToolCalls, schema.ToolCall{
 			ID:   tc.ID,
@@ -342,6 +340,27 @@ func convertOpenAIResponse(resp *openaiResponse) *schema.Message {
 		})
 	}
 	return openAIMessageWithMeta(msg, resp, choice.FinishReason)
+}
+
+func openAIContentText(content interface{}) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []interface{}:
+		var parts []string
+		for _, item := range v {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if text, ok := m["text"].(string); ok {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "")
+	default:
+		return ""
+	}
 }
 
 func openAIMessageWithMeta(msg *schema.Message, resp *openaiResponse, finishReason string) *schema.Message {

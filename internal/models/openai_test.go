@@ -44,3 +44,26 @@ func TestConvertOpenAIResponseIncludesUsage(t *testing.T) {
 		t.Fatalf("cached = %d", msg.ResponseMeta.Usage.PromptTokenDetails.CachedTokens)
 	}
 }
+
+func TestConvertOpenAIResponseContentArray(t *testing.T) {
+	var resp openaiResponse
+	if err := json.Unmarshal([]byte(`{
+		"choices": [{
+			"message": {
+				"role": "assistant",
+				"content": [
+					{"type": "text", "text": "I will inspect the archive. "},
+					{"type": "text", "text": "Then I will identify the binary."}
+				]
+			},
+			"finish_reason": "stop"
+		}]
+	}`), &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	msg := convertOpenAIResponse(&resp)
+	if msg.Content != "I will inspect the archive. Then I will identify the binary." {
+		t.Fatalf("content = %q", msg.Content)
+	}
+}

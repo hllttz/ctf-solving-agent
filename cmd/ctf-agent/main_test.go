@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	"github.com/verialabs/ctf-agent/internal/config"
 	"github.com/verialabs/ctf-agent/internal/solver"
 )
 
@@ -55,5 +57,23 @@ func TestStatusText(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("statusText(%d) = %q", tc.status, got)
 		}
+	}
+}
+
+func TestRunRejectsMissingTargetAndFileWithoutPrompting(t *testing.T) {
+	cmd := runCmd(&config.Config{})
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	cmd.SetOut(&stderr)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got := err.Error(); !strings.Contains(got, "provide at least --target or --file") {
+		t.Fatalf("error = %q", got)
+	}
+	if strings.Contains(stderr.String(), "靶机地址") {
+		t.Fatalf("unexpected interactive prompt: %q", stderr.String())
 	}
 }
