@@ -36,16 +36,43 @@ func NewFlagReporter() *FlagReporter {
 }
 
 func IsPlausibleFlag(flag string) bool {
+	return flagRejectionReason(flag) == ""
+}
+
+func flagRejectionReason(flag string) string {
 	flag = strings.TrimSpace(flag)
-	if flag == "" || byteEscapePattern.MatchString(flag) || !flagShapePattern.MatchString(flag) {
-		return false
+	if flag == "" {
+		return "flag was empty"
+	}
+	if byteEscapePattern.MatchString(flag) {
+		return "value contains escaped byte sequences. Do not report raw bytes or encoded blobs; decode or derive the final prefix{...} flag first."
 	}
 	for _, r := range flag {
 		if r < 0x20 || r == 0x7f {
-			return false
+			return "value contains control characters. Do not report raw bytes; decode or derive the final printable prefix{...} flag first."
 		}
 	}
-	return true
+	if hasWhitespaceInsideBraces(flag) {
+		return "value contains whitespace inside braces. OCR often inserts spaces or confuses spaces with underscores; visually verify the text and try confirmed variants such as replacing the whitespace with '_' before reporting."
+	}
+	if !flagShapePattern.MatchString(flag) {
+		return "value does not look like a complete printable CTF flag. Do not report encoded blobs, placeholders, or decoys; decode or derive the final prefix{...} flag first."
+	}
+	return ""
+}
+
+func hasWhitespaceInsideBraces(flag string) bool {
+	start := strings.IndexByte(flag, '{')
+	end := strings.LastIndexByte(flag, '}')
+	if start == -1 || end <= start {
+		return false
+	}
+	for _, r := range flag[start+1 : end] {
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *FlagReporter) Report(flag, method, confidence, evidence string) ReportedFlag {
@@ -107,8 +134,8 @@ func (t *ReportFlagTool) InvokableRun(_ context.Context, argsJSON string, _ ...t
 	if strings.TrimSpace(args.Flag) == "" {
 		return "No flag reported: flag was empty.", nil
 	}
-	if !IsPlausibleFlag(args.Flag) {
-		return "Flag report rejected: value does not look like a complete printable CTF flag. Do not report raw bytes, escaped byte strings, encoded blobs, placeholders, or decoys; decode or derive the final prefix{...} flag first.", nil
+	if reason := flagRejectionReason(args.Flag); reason != "" {
+		return "Flag report rejected: " + reason, nil
 	}
 	report := t.reporter.Report(args.Flag, args.Method, args.Confidence, args.Evidence)
 	b, err := json.Marshal(report)

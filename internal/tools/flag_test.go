@@ -83,3 +83,21 @@ func TestReportFlagToolRejectsControlBytes(t *testing.T) {
 		t.Fatalf("unexpected report")
 	}
 }
+
+func TestReportFlagToolExplainsWhitespaceInsideBraces(t *testing.T) {
+	reporter := NewFlagReporter()
+	tool := NewReportFlagTool(reporter)
+
+	out, err := tool.InvokableRun(context.Background(), `{"flag":"DASCTF{good_yOu_get_the _ffffflag!}","method":"ocr"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun error: %v", err)
+	}
+	for _, want := range []string{"rejected", "whitespace inside braces", "OCR", "underscores"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in output:\n%s", want, out)
+		}
+	}
+	if _, ok := reporter.Latest(); ok {
+		t.Fatalf("unexpected report")
+	}
+}
