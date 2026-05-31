@@ -48,3 +48,17 @@ func TestExtractFlagResultIgnoresNonFlagJSONType(t *testing.T) {
 		t.Fatalf("flag=%q method=%q", flag, method)
 	}
 }
+
+func TestExtractFlagResultRejectsEscapedBytesFlagLine(t *testing.T) {
+	flag, method := extractFlagResult(`FLAG: #)\x1e$8\x0e\x15 7\x0e\x05 \x00\x0e7\x12\x1d\x0f$\x01\x019`)
+	if flag != "" || method != "" {
+		t.Fatalf("flag=%q method=%q", flag, method)
+	}
+}
+
+func TestExtractFlagResultRejectsEscapedBytesJSON(t *testing.T) {
+	flag, method := extractFlagResult(`{"type":"flag_found","flag":"#)\\x1e$8\\x0e\\x15 7\\x0e\\x05 \\x00\\x0e7\\x12\\x1d\\x0f$\\x01\\x019","method":"read blob"}`)
+	if flag != "" || method != "" {
+		t.Fatalf("flag=%q method=%q", flag, method)
+	}
+}

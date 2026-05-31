@@ -517,6 +517,9 @@ func extractJSONFlag(text string) (string, string) {
 		if flag == "" {
 			continue
 		}
+		if !sandboxTools.IsPlausibleFlag(flag) {
+			continue
+		}
 		if out.Type != "" && out.Type != "flag_found" {
 			continue
 		}
@@ -596,7 +599,10 @@ func extractFlagLine(text string) string {
 		}
 		upper := strings.ToUpper(line)
 		if strings.HasPrefix(upper, "FLAG:") {
-			return strings.TrimSpace(line[len("FLAG:"):])
+			flag := strings.TrimSpace(line[len("FLAG:"):])
+			if sandboxTools.IsPlausibleFlag(flag) {
+				return flag
+			}
 		}
 	}
 	return ""
@@ -634,7 +640,11 @@ func extractFlag(text string) string {
 				} else if text[i] == '}' {
 					depth--
 					if depth == 0 {
-						return text[pos : i+1]
+						flag := text[pos : i+1]
+						if sandboxTools.IsPlausibleFlag(flag) {
+							return flag
+						}
+						break
 					}
 				}
 			}

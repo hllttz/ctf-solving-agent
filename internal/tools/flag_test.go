@@ -51,3 +51,35 @@ func TestReportFlagToolIgnoresEmptyFlag(t *testing.T) {
 		t.Fatalf("unexpected report")
 	}
 }
+
+func TestReportFlagToolRejectsEscapedBytes(t *testing.T) {
+	reporter := NewFlagReporter()
+	tool := NewReportFlagTool(reporter)
+
+	out, err := tool.InvokableRun(context.Background(), `{"flag":"#)\\x1e$8\\x0e\\x15 7\\x0e\\x05 \\x00\\x0e7\\x12\\x1d\\x0f$\\x01\\x019","method":"read bundled blob"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun error: %v", err)
+	}
+	if !strings.Contains(out, "rejected") {
+		t.Fatalf("output = %q", out)
+	}
+	if _, ok := reporter.Latest(); ok {
+		t.Fatalf("unexpected report")
+	}
+}
+
+func TestReportFlagToolRejectsControlBytes(t *testing.T) {
+	reporter := NewFlagReporter()
+	tool := NewReportFlagTool(reporter)
+
+	out, err := tool.InvokableRun(context.Background(), `{"flag":"CTF{bad\u0000flag}"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun error: %v", err)
+	}
+	if !strings.Contains(out, "rejected") {
+		t.Fatalf("output = %q", out)
+	}
+	if _, ok := reporter.Latest(); ok {
+		t.Fatalf("unexpected report")
+	}
+}

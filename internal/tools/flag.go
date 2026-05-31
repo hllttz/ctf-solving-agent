@@ -4,11 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+)
+
+var (
+	flagShapePattern  = regexp.MustCompile(`(?i)^[a-z0-9_.-]{2,32}\{[!-~]{1,256}\}$`)
+	byteEscapePattern = regexp.MustCompile(`(?i)\\(?:x[0-9a-f]{2}|u00[0-9a-f]{2})`)
 )
 
 // ReportedFlag is a solver's structured local flag report.
@@ -27,6 +33,19 @@ type FlagReporter struct {
 
 func NewFlagReporter() *FlagReporter {
 	return &FlagReporter{}
+}
+
+func IsPlausibleFlag(flag string) bool {
+	flag = strings.TrimSpace(flag)
+	if flag == "" || byteEscapePattern.MatchString(flag) || !flagShapePattern.MatchString(flag) {
+		return false
+	}
+	for _, r := range flag {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *FlagReporter) Report(flag, method, confidence, evidence string) ReportedFlag {
@@ -87,6 +106,9 @@ func (t *ReportFlagTool) InvokableRun(_ context.Context, argsJSON string, _ ...t
 	}
 	if strings.TrimSpace(args.Flag) == "" {
 		return "No flag reported: flag was empty.", nil
+	}
+	if !IsPlausibleFlag(args.Flag) {
+		return "Flag report rejected: value does not look like a complete printable CTF flag. Do not report raw bytes, escaped byte strings, encoded blobs, placeholders, or decoys; decode or derive the final prefix{...} flag first.", nil
 	}
 	report := t.reporter.Report(args.Flag, args.Method, args.Confidence, args.Evidence)
 	b, err := json.Marshal(report)

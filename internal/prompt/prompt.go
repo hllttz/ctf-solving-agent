@@ -139,7 +139,7 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	b.WriteString("4. Be persistent and creative. Try multiple approaches.\n")
 	b.WriteString("5. The sandbox has extensive CTF tools installed - check /tools.txt for reference.\n")
 	b.WriteString("6. Ignore placeholder flags like CTF{flag} or CTF{placeholder}; report only the real challenge flag.\n")
-	b.WriteString("7. When you find the real flag, call report_flag with the exact flag, brief method, confidence, and evidence/reproduction command. This records the result locally and does not submit anywhere.\n")
+	b.WriteString("7. When you find the real printable flag in prefix{...} form, call report_flag with the exact flag, brief method, confidence, and evidence/reproduction command. This records the result locally and does not submit anywhere. Do not report raw bytes, escaped byte strings, encoded blobs, placeholders, or decoys as flags; decode or derive the final flag first.\n")
 	b.WriteString("8. Before each tool call, briefly state your investigation intent in your own words: what you are trying to learn or verify, and why this is the next useful step. Keep it concise and technical.\n")
 	b.WriteString("9. After important results, briefly update what changed in your understanding before continuing.\n")
 	b.WriteString("10. If report_flag is impossible, end with JSON on its own line: {\"type\":\"flag_found\",\"flag\":\"<flag>\",\"method\":\"<brief method>\"}\n")
