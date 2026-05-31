@@ -105,6 +105,22 @@ func TestBuildIncludesReportFlagTool(t *testing.T) {
 	}
 }
 
+func TestBuildRequestsModelCommentary(t *testing.T) {
+	meta := &Meta{Name: "local", Category: "misc"}
+
+	got := Build(meta, "/challenge/distfiles", "/workspace")
+
+	for _, want := range []string{
+		"Before each tool call",
+		"in your own words",
+		"investigation intent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestBuildSupportsRemoteMetadataFormat(t *testing.T) {
 	meta := &Meta{
 		Name:           "remote-format",

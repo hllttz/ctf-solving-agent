@@ -67,6 +67,8 @@ type Solver struct {
 	mu        sync.Mutex
 }
 
+var commentaryMu sync.Mutex
+
 // New creates a new solver instance.
 func New(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus) *Solver {
 	return NewWithName(m, sb, b, "solver")
@@ -153,7 +155,10 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	startTime := time.Now()
 
 	// Run the agent
-	output, err := agent.Generate(ctx, input)
+	msgFutureOpt, msgFuture := react.WithMessageFuture()
+	watchDone := s.watchModelCommentary(ctx, msgFuture)
+	output, err := agent.Generate(ctx, input, msgFutureOpt)
+	<-watchDone
 	if err != nil {
 		s.traceEvent("error", 0, "", map[string]any{"error": err.Error()})
 		return nil, fmt.Errorf("agent run: %w", err)
@@ -199,6 +204,47 @@ func (s *Solver) runWithUserMessage(ctx context.Context, systemPrompt, userMessa
 	})
 
 	return result, nil
+}
+
+func (s *Solver) watchModelCommentary(ctx context.Context, future react.MessageFuture) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		iter := future.GetMessages()
+		for {
+			msg, ok, err := iter.Next()
+			if err != nil {
+				s.traceEvent("commentary_error", s.currentStep(), "", map[string]any{"error": err.Error()})
+				return
+			}
+			if !ok {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			s.emitCommentary(msg)
+		}
+	}()
+	return done
+}
+
+func (s *Solver) emitCommentary(msg *schema.Message) {
+	if msg == nil || msg.Role != schema.Assistant {
+		return
+	}
+	text := strings.TrimSpace(msg.Content)
+	if text == "" {
+		return
+	}
+	s.traceEvent("commentary", s.currentStep(), "", map[string]any{
+		"text": text,
+	})
+	commentaryMu.Lock()
+	defer commentaryMu.Unlock()
+	fmt.Fprintf(os.Stderr, "[%s/%s] %s\n", s.challenge, s.agentName, text)
 }
 
 func (s *Solver) recordUsage(output *schema.Message) (inputTokens, outputTokens, cacheTokens int, costUSD float64) {
