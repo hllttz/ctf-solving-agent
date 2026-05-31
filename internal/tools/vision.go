@@ -40,16 +40,16 @@ func (t *ViewImageTool) InvokableRun(_ context.Context, argsJSON string, _ ...to
 
 	path, data, err := t.readImage(args.Path)
 	if err != nil {
-		return "", fmt.Errorf("view_image: %w", err)
+		return fmt.Sprintf("view_image failed for %q: %v\nTry list_files on the parent directory or use bash commands such as file, xxd, pngcheck, identify, binwalk, or foremost to inspect and repair the file.", args.Path, err), nil
 	}
 
 	if len(data) > 4*1024*1024 {
-		return "", fmt.Errorf("view_image: file too large (%d bytes, max 4MB)", len(data))
+		return fmt.Sprintf("view_image skipped %q: file too large (%d bytes, max 4MB).\nUse bash tools such as file, exiftool, strings, binwalk, or Python/OpenCV to inspect it.", path, len(data)), nil
 	}
 
 	mime := detectImageMime(data)
 	if mime == "" {
-		return "", fmt.Errorf("view_image: not a recognized image format")
+		return fmt.Sprintf("view_image could not recognize %q as PNG/JPEG/GIF/BMP/WebP (%d bytes).\nUse bash tools such as file, xxd, pngcheck, identify, binwalk, foremost, or Python to inspect magic bytes and repair the image before retrying.", path, len(data)), nil
 	}
 
 	return fmt.Sprintf(`Image loaded: %s

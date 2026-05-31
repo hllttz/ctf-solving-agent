@@ -112,6 +112,7 @@ func TestBuildRequestsModelCommentary(t *testing.T) {
 
 	for _, want := range []string{
 		"Before each tool call",
+		"in Chinese",
 		"in your own words",
 		"investigation intent",
 	} {
