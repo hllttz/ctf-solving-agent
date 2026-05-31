@@ -108,6 +108,8 @@ go run ./cmd/ctf-agent solve ./challenges
 
 `solve` 会扫描所有包含 `metadata.yml` 的子目录，并按 `MAX_CONCURRENT_CHALLENGES` 控制并发题目数。每道题内部仍会按 `MODEL_SPECS` 启动多个 solver。
 
+启动时会打印本次使用的题目路径、模型列表、sandbox 镜像和 operator 地址。若 `MODEL_SPECS` 里包含未配置 API Key 的 provider，程序会在创建 sandbox 前直接报错，例如提示缺少 `OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY`。
+
 ## 模型配置
 
 通过环境变量配置模型和密钥：
@@ -242,6 +244,7 @@ solver 可用工具包括：
 - 每道题状态。
 - 找到的 flag 和方法。
 - step 数。
+- trace 文件路径。
 - 成本汇总。
 
 trace 写入 `logs/trace-<challenge>-<model>-<timestamp>.jsonl`，包含：
