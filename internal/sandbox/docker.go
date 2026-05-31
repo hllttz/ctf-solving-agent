@@ -224,7 +224,11 @@ func (s *DockerSandbox) readFileViaDocker(path string) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, "docker", "exec", "-i",
 		s.containerName, "cat", path)
-	return cmd.Output()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("read_file %q: %w: %s", path, err, strings.TrimSpace(string(output)))
+	}
+	return output, nil
 }
 
 func (s *DockerSandbox) Stop(ctx context.Context) error {
