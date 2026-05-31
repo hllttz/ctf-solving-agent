@@ -15,6 +15,11 @@ var modelPrices = map[string][2]float64{
 	"gpt-5.4-mini":      {0.15, 0.60},
 	"gpt-5.3-codex":     {2.50, 10.0},
 	"gemini-2.5-pro":    {1.25, 10.0},
+	"deepseek-chat":     {0.27, 1.10},
+	"deepseek-reasoner": {0.55, 2.19},
+	"deepseek-v4":       {0.55, 2.19},
+	"deepseek-v4.1":     {0.55, 2.19},
+	"deepseek-v4-flash": {0.27, 1.10},
 }
 
 // Usage accumulates token counts and cost for a model.

@@ -31,7 +31,24 @@ func TestInspectSpecDefaults(t *testing.T) {
 	if got.ModelID != "deepseek-chat" {
 		t.Fatalf("model id = %q", got.ModelID)
 	}
-	if got.ContextWindow != 200_000 {
+	if got.ContextWindow != 64_000 {
+		t.Fatalf("context window = %d", got.ContextWindow)
+	}
+	if got.SupportsVision {
+		t.Fatalf("supports vision = true")
+	}
+}
+
+func TestInspectSpecDeepSeekV4Flash(t *testing.T) {
+	got := InspectSpec("deepseek/deepseek-v4-flash")
+
+	if got.Provider != "deepseek" {
+		t.Fatalf("provider = %q", got.Provider)
+	}
+	if got.ModelID != "deepseek-v4-flash" {
+		t.Fatalf("model id = %q", got.ModelID)
+	}
+	if got.ContextWindow != 1_000_000 {
 		t.Fatalf("context window = %d", got.ContextWindow)
 	}
 	if got.SupportsVision {

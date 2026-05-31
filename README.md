@@ -120,6 +120,13 @@ export GEMINI_API_KEY=...
 export DEEPSEEK_API_KEY=...
 ```
 
+只使用 DeepSeek：
+
+```bash
+export MODEL_SPECS=deepseek/deepseek-v4-flash
+export DEEPSEEK_API_KEY=...
+```
+
 默认模型：
 
 ```text
@@ -142,6 +149,12 @@ openai/gpt-5.4
 
 ```bash
 export OPENAI_BASE_URL=https://proxy.example.com/v1/chat/completions
+```
+
+DeepSeek 默认使用 `https://api.deepseek.com/chat/completions`。如果需要代理或私有网关：
+
+```bash
+export DEEPSEEK_BASE_URL=https://proxy.example.com
 ```
 
 ## 其他配置

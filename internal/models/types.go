@@ -19,16 +19,23 @@ type SpecInfo struct {
 var contextWindows = map[string]int{
 	"claude-opus-4-6":        1_000_000,
 	"claude-sonnet-4-6":      1_000_000,
+	"gpt-5.5":                1_000_000,
 	"gpt-5.4":                1_000_000,
 	"gpt-5.4-mini":           400_000,
 	"gpt-5.3-codex":          1_000_000,
 	"gpt-5.3-codex-spark":    128_000,
 	"gemini-3-flash-preview": 1_000_000,
+	"deepseek-chat":          64_000,
+	"deepseek-reasoner":      64_000,
+	"deepseek-v4":            1_000_000,
+	"deepseek-v4-pro":        1_000_000,
+	"deepseek-v4-flash":      1_000_000,
 }
 
 var visionModels = map[string]bool{
 	"claude-opus-4-6":        true,
 	"claude-sonnet-4-6":      true,
+	"gpt-5.5":                true,
 	"gpt-5.4":                true,
 	"gpt-5.4-mini":           true,
 	"gemini-3-flash-preview": true,
@@ -36,9 +43,8 @@ var visionModels = map[string]bool{
 
 // Provider abstracts a model backend (Anthropic, OpenAI, etc.).
 type Provider interface {
-	// Generate sends messages and returns the model's response.
 	Generate(ctx context.Context, messages []*schema.Message, tools []*schema.ToolInfo) (*schema.Message, error)
-	// Stream sends messages and returns a stream of response chunks.
+
 	Stream(ctx context.Context, messages []*schema.Message, tools []*schema.ToolInfo) (*schema.StreamReader[*schema.Message], error)
 }
 
