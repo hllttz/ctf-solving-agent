@@ -24,6 +24,9 @@ func (c *Coordinator) StartOperatorServer(ctx context.Context, addr string) (str
 	mux.HandleFunc("/status", c.handleOperatorStatus)
 	mux.HandleFunc("/notifications", c.handleOperatorNotifications)
 	mux.HandleFunc("/trace", c.handleOperatorTrace)
+	mux.HandleFunc("/artifacts", c.handleOperatorArtifacts)
+	mux.HandleFunc("/ui", c.handleOperatorUI)
+	mux.HandleFunc("/ui/", c.handleOperatorUI)
 	mux.HandleFunc("/broadcast", c.handleOperatorBroadcast)
 	mux.HandleFunc("/kill", c.handleOperatorKill)
 	mux.HandleFunc("/bump", c.handleOperatorBump)
@@ -73,7 +76,11 @@ func (c *Coordinator) handleOperatorStatus(w http.ResponseWriter, _ *http.Reques
 	c.mu.Lock()
 	active := make(map[string]any, len(c.swarms))
 	for name, sw := range c.swarms {
-		active[name] = sw.Status()
+		status := sw.Status()
+		if _, done := c.results[name]; done {
+			status["active"] = false
+		}
+		active[name] = status
 	}
 	c.mu.Unlock()
 
@@ -114,6 +121,68 @@ func (c *Coordinator) handleOperatorTrace(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, map[string]any{"lines": lines})
+}
+
+func (c *Coordinator) handleOperatorArtifacts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET required", http.StatusMethodNotAllowed)
+		return
+	}
+	challenge := strings.TrimSpace(r.URL.Query().Get("challenge"))
+	if challenge == "" {
+		http.Error(w, "challenge is required", http.StatusBadRequest)
+		return
+	}
+	workspace, err := safeWorkspacePath(c.challengesDir, challenge, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	rel := strings.TrimSpace(r.URL.Query().Get("path"))
+	if rel == "" {
+		files, err := listArtifacts(workspace)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, map[string]any{"files": files})
+		return
+	}
+
+	path, err := safeWorkspacePath(c.challengesDir, challenge, rel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "artifact is a directory", http.StatusBadRequest)
+		return
+	}
+	const maxPreviewBytes = 256 * 1024
+	if info.Size() > maxPreviewBytes {
+		http.Error(w, "artifact is too large to preview", http.StatusRequestEntityTooLarge)
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if isProbablyBinary(data) {
+		http.Error(w, "artifact appears to be binary", http.StatusUnsupportedMediaType)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"path":    filepath.ToSlash(filepath.Clean(rel)),
+		"size":    info.Size(),
+		"content": string(data),
+	})
 }
 
 func (c *Coordinator) handleOperatorBroadcast(w http.ResponseWriter, r *http.Request) {
@@ -303,6 +372,82 @@ func readRecentTrace(logDir, challenge, model string, lastN int) ([]string, erro
 
 func ReadRecentTrace(logDir, challenge, model string, lastN int) ([]string, error) {
 	return readRecentTrace(logDir, challenge, model, lastN)
+}
+
+type artifactInfo struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Size  int64  `json:"size"`
+	IsDir bool   `json:"is_dir"`
+}
+
+func listArtifacts(workspace string) ([]artifactInfo, error) {
+	if _, err := os.Stat(workspace); err != nil {
+		return nil, err
+	}
+	var files []artifactInfo
+	err := filepath.WalkDir(workspace, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == workspace {
+			return nil
+		}
+		rel, err := filepath.Rel(workspace, path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		files = append(files, artifactInfo{
+			Path:  filepath.ToSlash(rel),
+			Name:  entry.Name(),
+			Size:  info.Size(),
+			IsDir: entry.IsDir(),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func safeWorkspacePath(challengesDir, challenge, rel string) (string, error) {
+	challenge = filepath.Clean(strings.TrimSpace(challenge))
+	if challenge == "." || challenge == "" || strings.Contains(challenge, string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid challenge")
+	}
+	base, err := filepath.Abs(filepath.Join(challengesDir, challenge, "workspace"))
+	if err != nil {
+		return "", err
+	}
+	if rel == "" {
+		return base, nil
+	}
+	cleanRel := filepath.Clean(strings.TrimPrefix(rel, "/"))
+	if cleanRel == "." {
+		return base, nil
+	}
+	path, err := filepath.Abs(filepath.Join(base, cleanRel))
+	if err != nil {
+		return "", err
+	}
+	if path != base && !strings.HasPrefix(path, base+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid artifact path")
+	}
+	return path, nil
+}
+
+func isProbablyBinary(data []byte) bool {
+	for i := 0; i < len(data) && i < 512; i++ {
+		if data[i] == 0 || data[i] < 8 || (data[i] > 13 && data[i] < 32) {
+			return true
+		}
+	}
+	return false
 }
 
 func tracePart(s string) string {

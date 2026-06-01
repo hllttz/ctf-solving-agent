@@ -277,6 +277,7 @@ func (s *Swarm) Status() map[string]any {
 	defer s.mu.Unlock()
 
 	agents := make(map[string]any, len(s.solvers))
+	var commentary []solver.Commentary
 	for spec, sol := range s.solvers {
 		agent := map[string]any{
 			"history_len": len(sol.History()),
@@ -289,12 +290,14 @@ func (s *Swarm) Status() map[string]any {
 			}
 		}
 		agents[spec] = agent
+		commentary = append(commentary, sol.Commentary()...)
 	}
 	return map[string]any{
-		"challenge": s.challengeName,
-		"active":    true,
-		"agents":    agents,
-		"findings":  s.bus.All(),
+		"challenge":  s.challengeName,
+		"active":     true,
+		"agents":     agents,
+		"findings":   s.bus.All(),
+		"commentary": commentary,
 	}
 }
 

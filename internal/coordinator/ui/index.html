@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ctf-agent operator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4f1e8;
+      --ink: #191713;
+      --muted: #6f6a5f;
+      --line: #26231d;
+      --panel: #fffdf6;
+      --soft: #e3ded1;
+      --green: #178a5b;
+      --red: #b53f34;
+      --amber: #b97816;
+      --blue: #2368a2;
+      --shadow: rgba(25, 23, 19, .12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      letter-spacing: 0;
+    }
+    button, input, select {
+      font: inherit;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+    }
+    aside {
+      border-right: 2px solid var(--line);
+      background: #ebe6d8;
+      padding: 22px 18px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+    }
+    main {
+      min-width: 0;
+      padding: 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    h1 {
+      font-size: 22px;
+      line-height: 1;
+      margin: 0;
+      text-transform: uppercase;
+    }
+    h2 {
+      font-size: 13px;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 8px;
+    }
+    .lamp {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 0 4px rgba(181, 63, 52, .13);
+      flex: 0 0 auto;
+    }
+    .lamp.ok {
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(23, 138, 91, .15);
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .stat, .section, .challenge, .trace-row {
+      background: var(--panel);
+      border: 2px solid var(--line);
+      box-shadow: 4px 4px 0 var(--shadow);
+    }
+    .stat {
+      padding: 14px;
+      min-height: 92px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .value {
+      font-size: 24px;
+      line-height: 1.1;
+      overflow-wrap: anywhere;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, .95fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .section {
+      padding: 16px;
+      min-width: 0;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    select, input {
+      border: 2px solid var(--line);
+      background: #fffaf0;
+      color: var(--ink);
+      padding: 8px 10px;
+      min-height: 38px;
+      max-width: 100%;
+    }
+    button {
+      border: 2px solid var(--line);
+      background: var(--line);
+      color: #fffdf6;
+      padding: 8px 12px;
+      min-height: 38px;
+      cursor: pointer;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .challenge-list {
+      display: grid;
+      gap: 12px;
+    }
+    .challenge {
+      padding: 13px;
+      cursor: pointer;
+    }
+    .challenge.selected {
+      outline: 4px solid rgba(35, 104, 162, .25);
+      background: #fff8df;
+    }
+    .challenge-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+    .challenge-name {
+      font-size: 15px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border: 2px solid var(--line);
+      padding: 3px 7px;
+      min-height: 26px;
+      font-size: 11px;
+      text-transform: uppercase;
+      background: var(--soft);
+      white-space: nowrap;
+    }
+    .badge.running { background: #dfe9c9; }
+    .badge.solved { background: #c9eadc; color: #0d5135; }
+    .badge.error { background: #f0d0ca; color: #7c241c; }
+    .badge.cancelled { background: #ddd8cd; }
+    .agents {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .agent {
+      border: 1px solid var(--line);
+      padding: 4px 6px;
+      font-size: 11px;
+      background: #fffaf0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .findings {
+      display: grid;
+      gap: 8px;
+      max-height: 320px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .finding {
+      border-left: 4px solid var(--blue);
+      background: #f8f3e7;
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .finding time {
+      color: var(--muted);
+      display: block;
+      margin-top: 5px;
+    }
+    .trace-list {
+      display: grid;
+      gap: 10px;
+      max-height: 620px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .trace-row {
+      padding: 11px;
+      box-shadow: none;
+    }
+    .trace-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+    .trace-type {
+      color: var(--ink);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .timeline {
+      display: grid;
+      gap: 10px;
+      max-height: 360px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .timeline-row {
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      padding: 10px;
+      min-width: 0;
+    }
+    .timeline-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 8px;
+    }
+    .timeline-name {
+      font-weight: 700;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .timeline-bar {
+      height: 8px;
+      border: 1px solid var(--line);
+      background: var(--soft);
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .timeline-fill {
+      height: 100%;
+      background: var(--blue);
+      min-width: 4px;
+    }
+    .event-feed {
+      display: grid;
+      gap: 9px;
+      max-height: 430px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .event {
+      border-left: 4px solid var(--line);
+      background: #f8f3e7;
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .event.update { border-left-color: var(--blue); }
+    .event.finding { border-left-color: var(--green); }
+    .event.tool_call { border-left-color: var(--amber); }
+    .event.tool_error { border-left-color: var(--red); }
+    .event.flag { border-left-color: var(--green); background: #edf7e8; }
+    mark {
+      background: #ffe38a;
+      color: var(--ink);
+      padding: 0 2px;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      line-height: 1.45;
+      max-height: 260px;
+      overflow: auto;
+    }
+    .artifact-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+      min-height: 392px;
+    }
+    .artifact-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      height: 360px;
+      overflow: auto;
+      padding-right: 4px;
+      min-width: 0;
+    }
+    .artifact {
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      padding: 7px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+      min-height: 34px;
+      flex: 0 0 auto;
+    }
+    .artifact.dir {
+      cursor: default;
+      color: var(--muted);
+      background: #f2ecdc;
+    }
+    .artifact:hover:not(.dir) {
+      background: #fff1c2;
+    }
+    .artifact.selected {
+      background: #fff1c2;
+      outline: 3px solid rgba(185, 120, 22, .28);
+    }
+    .artifact-preview-shell {
+      border: 2px solid var(--line);
+      background: #14130f;
+      color: #fff8dd;
+      height: 360px;
+      min-width: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .artifact-preview-title {
+      border-bottom: 1px solid rgba(255, 248, 221, .22);
+      color: #d7cda9;
+      padding: 8px 12px;
+      font-size: 11px;
+      min-height: 34px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .artifact-preview {
+      margin: 0;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+      padding: 12px;
+      background: transparent;
+      color: inherit;
+    }
+    .empty {
+      border: 2px dashed var(--line);
+      padding: 18px;
+      color: var(--muted);
+      background: rgba(255, 253, 246, .5);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .usage {
+      display: grid;
+      gap: 8px;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .usage-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      border-bottom: 1px solid var(--soft);
+      padding-bottom: 8px;
+      font-size: 12px;
+    }
+    @media (max-width: 1020px) {
+      .shell { grid-template-columns: 1fr; }
+      aside { position: relative; height: auto; border-right: 0; border-bottom: 2px solid var(--line); }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+      .artifact-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      main { padding: 14px; }
+      .stats { grid-template-columns: 1fr; }
+      .toolbar { align-items: stretch; }
+      select, input, button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <h1>ctf-agent</h1>
+        <span id="health" class="lamp" title="connection status"></span>
+      </div>
+      <section>
+        <h2>Operator</h2>
+        <div class="meta" id="operatorMeta">loading...</div>
+      </section>
+      <section style="margin-top:24px">
+        <h2>Usage</h2>
+        <div class="usage" id="usageList"></div>
+      </section>
+    </aside>
+    <main>
+      <div class="stats">
+        <div class="stat"><div class="label">Summary</div><div class="value" id="summary">-</div></div>
+        <div class="stat"><div class="label">Active</div><div class="value" id="activeCount">0</div></div>
+        <div class="stat"><div class="label">Results</div><div class="value" id="resultCount">0</div></div>
+        <div class="stat"><div class="label">Cost</div><div class="value" id="totalCost">$0.0000</div></div>
+      </div>
+      <div class="grid">
+        <section class="section">
+          <h2>Challenges</h2>
+          <div id="challengeList" class="challenge-list"></div>
+        </section>
+        <section class="section">
+          <h2>Solver Timeline</h2>
+          <div id="timeline" class="timeline"></div>
+        </section>
+      </div>
+      <section class="section" style="margin-top:18px">
+        <h2>Live Event Feed</h2>
+        <div class="toolbar">
+          <select id="eventTypeFilter" aria-label="Event type">
+            <option value="">all events</option>
+            <option value="update">updates</option>
+            <option value="finding">findings</option>
+            <option value="tool_call">tool calls</option>
+            <option value="tool_error">tool errors</option>
+            <option value="flag">flags</option>
+          </select>
+        </div>
+        <div id="eventFeed" class="event-feed"></div>
+      </section>
+      <div class="grid" style="margin-top:18px">
+        <section class="section">
+          <h2>Trace Viewer</h2>
+          <div class="toolbar">
+            <select id="challengeSelect" aria-label="Challenge"></select>
+            <select id="modelSelect" aria-label="Model"></select>
+            <input id="lastInput" type="number" min="1" max="300" value="40" aria-label="Trace lines">
+            <input id="traceSearch" type="search" placeholder="Search trace" aria-label="Trace search">
+            <button id="loadTrace">Load</button>
+          </div>
+          <div id="traceList" class="trace-list"></div>
+        </section>
+        <section class="section">
+          <h2>Findings</h2>
+          <div id="findings" class="findings"></div>
+        </section>
+      </div>
+      <section class="section" style="margin-top:18px">
+        <h2>Artifacts</h2>
+        <div class="toolbar">
+          <button id="loadArtifacts">Refresh Artifacts</button>
+          <label class="meta"><input id="autoArtifacts" type="checkbox" checked> auto refresh</label>
+        </div>
+        <div class="artifact-layout">
+          <div id="artifactList" class="artifact-list"></div>
+          <div class="artifact-preview-shell">
+            <div id="artifactPreviewTitle" class="artifact-preview-title">No artifact selected</div>
+            <pre id="artifactPreview" class="artifact-preview">Select an artifact to preview.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const state = {
+      status: null,
+      selectedChallenge: "",
+      selectedModel: "",
+      selectedArtifact: "",
+      traceLines: [],
+      traceQuery: "",
+      eventType: "",
+      artifactSignature: "",
+      artifactChallenge: "",
+      artifactLoading: false
+    };
+    const $ = (id) => document.getElementById(id);
+
+    function statusText(result) {
+      if (!result || typeof result.status !== "number") return "running";
+      return ["running", "solved", "gave up", "error", "cancelled"][result.status] || `status ${result.status}`;
+    }
+
+    function statusClass(text) {
+      if (text === "solved") return "solved";
+      if (text === "error" || text === "gave up") return "error";
+      if (text === "cancelled") return "cancelled";
+      return "running";
+    }
+
+    function money(n) {
+      return `$${Number(n || 0).toFixed(4)}`;
+    }
+
+    function shortName(name) {
+      return String(name || "").replace(/^.*\//, "");
+    }
+
+    function modelOptions(status) {
+      const out = new Set();
+      for (const sw of Object.values(status.active_challenges || {})) {
+        for (const model of Object.keys((sw && sw.agents) || {})) out.add(model);
+      }
+      for (const key of Object.keys(status.usage || {})) {
+        const firstSlash = key.indexOf("/");
+        if (firstSlash > -1) out.add(key.slice(0, firstSlash));
+      }
+      return Array.from(out).sort();
+    }
+
+    function challengeNames(status) {
+      return Array.from(new Set([
+        ...Object.keys(status.active_challenges || {}),
+        ...Object.keys(status.results || {})
+      ])).sort();
+    }
+
+    function renderStatus(status) {
+      const active = status.active_challenges || {};
+      const results = status.results || {};
+      const names = challengeNames(status);
+      $("health").classList.add("ok");
+      $("summary").textContent = status.summary || "-";
+      $("activeCount").textContent = Object.keys(active).length;
+      $("resultCount").textContent = Object.keys(results).length;
+      $("totalCost").textContent = money(status.total_cost_usd);
+      $("operatorMeta").innerHTML = [
+        `endpoint: ${location.origin}`,
+        `refreshed: ${new Date().toLocaleTimeString()}`,
+        `mode: read only`
+      ].join("<br>");
+
+      if (!state.selectedChallenge && names.length) state.selectedChallenge = names[0];
+      renderChallengeSelect(names);
+      renderModelSelect(modelOptions(status));
+      renderUsage(status.usage || {});
+      renderChallenges(names, active, results);
+      const selected = active[state.selectedChallenge];
+      renderTimeline(selected);
+      renderFindings(selected);
+      renderEventFeed(selected);
+      renderArtifactListMessage();
+    }
+
+    function renderChallengeSelect(names) {
+      const sel = $("challengeSelect");
+      const current = state.selectedChallenge;
+      sel.innerHTML = names.map((name) => `<option value="${escapeAttr(name)}">${escapeHTML(name)}</option>`).join("");
+      if (current) sel.value = current;
+    }
+
+    function renderModelSelect(models) {
+      const sel = $("modelSelect");
+      const options = ['<option value="">latest trace</option>'].concat(
+        models.map((name) => `<option value="${escapeAttr(name)}">${escapeHTML(shortName(name))}</option>`)
+      );
+      sel.innerHTML = options.join("");
+      sel.value = state.selectedModel;
+    }
+
+    function renderUsage(usage) {
+      const rows = Object.entries(usage).sort(([a], [b]) => a.localeCompare(b));
+      $("usageList").innerHTML = rows.length ? rows.map(([key, item]) => {
+        const input = item.InputTokens ?? item.input_tokens ?? 0;
+        const output = item.OutputTokens ?? item.output_tokens ?? 0;
+        return `<div class="usage-row"><span>${escapeHTML(key)}</span><span>in ${input} / out ${output}</span></div>`;
+      }).join("") : `<div class="empty">No token usage recorded yet.</div>`;
+    }
+
+    function renderChallenges(names, active, results) {
+      const list = $("challengeList");
+      if (!names.length) {
+        list.innerHTML = `<div class="empty">No active or completed challenges yet.</div>`;
+        return;
+      }
+      list.innerHTML = names.map((name) => {
+        const sw = active[name];
+        const result = results[name];
+        const text = sw && sw.active !== false ? "running" : statusText(result);
+        const agents = Object.keys((sw && sw.agents) || {});
+        return `<article class="challenge ${name === state.selectedChallenge ? "selected" : ""}" data-challenge="${escapeAttr(name)}">
+          <div class="challenge-head">
+            <div class="challenge-name">${escapeHTML(name)}</div>
+            <span class="badge ${statusClass(text)}">${escapeHTML(text)}</span>
+          </div>
+          <div class="agents">${agents.length ? agents.map((agent) => `<span class="agent">${escapeHTML(shortName(agent))}</span>`).join("") : `<span class="agent">no live agents</span>`}</div>
+        </article>`;
+      }).join("");
+      list.querySelectorAll("[data-challenge]").forEach((node) => {
+        node.addEventListener("click", () => {
+          if (state.selectedChallenge !== node.dataset.challenge) {
+            state.selectedArtifact = "";
+            $("artifactList").innerHTML = "";
+            $("artifactPreviewTitle").textContent = "No artifact selected";
+            $("artifactPreview").textContent = "Refresh artifacts to read the selected challenge workspace.";
+          }
+          state.selectedChallenge = node.dataset.challenge;
+          renderStatus(state.status);
+        });
+      });
+    }
+
+    function renderFindings(sw) {
+      const shared = ((sw && sw.findings) || []).map((item) => ({
+        author: item.Author || item.author || "unknown",
+        content: item.Content || item.content || "",
+        timestamp: item.Timestamp || item.timestamp || "",
+        kind: "shared"
+      }));
+      const commentary = ((sw && sw.commentary) || []).map((item) => ({
+        author: item.Agent || item.agent || "unknown",
+        content: item.Content || item.content || "",
+        timestamp: item.Timestamp || item.timestamp || "",
+        step: item.Step || item.step || 0,
+        kind: "update"
+      }));
+      const items = shared.concat(commentary).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+      $("findings").innerHTML = items.length ? items.map((item) => {
+        const step = item.step ? ` · step ${item.step}` : "";
+        return `<div class="finding">
+          <strong>${escapeHTML(item.author)}</strong> <span class="meta">${escapeHTML(item.kind)}${escapeHTML(step)}</span>
+          <div>${escapeHTML(item.content)}</div>
+          ${item.timestamp ? `<time>${escapeHTML(new Date(item.timestamp).toLocaleString())}</time>` : ""}
+        </div>`;
+      }).join("") : `<div class="empty">No shared findings or live agent updates for the selected challenge.</div>`;
+    }
+
+    function renderTimeline(sw) {
+      const agents = (sw && sw.agents) || {};
+      const commentary = (sw && sw.commentary) || [];
+      const entries = Object.entries(agents).sort(([a], [b]) => a.localeCompare(b));
+      if (!entries.length) {
+        $("timeline").innerHTML = `<div class="empty">No live solver timeline for the selected challenge.</div>`;
+        return;
+      }
+      const maxHistory = Math.max(...entries.map(([, agent]) => Number(agent.history_len || 0)), 1);
+      $("timeline").innerHTML = entries.map(([name, agent]) => {
+        const usage = agent.usage || {};
+        const cost = Number(agent.cost_usd || 0);
+        const history = Number(agent.history_len || 0);
+        const inputTokens = usage.InputTokens ?? usage.input_tokens ?? 0;
+        const outputTokens = usage.OutputTokens ?? usage.output_tokens ?? 0;
+        const width = Math.max(6, Math.min(100, history / maxHistory * 100));
+        const last = commentary.filter((item) => (item.Agent || item.agent) === name).slice(-1)[0];
+        const lastText = last ? (last.Content || last.content || "") : "No update yet.";
+        return `<div class="timeline-row">
+          <div class="timeline-head">
+            <div class="timeline-name">${escapeHTML(shortName(name))}</div>
+            <span class="badge running">${history} steps</span>
+          </div>
+          <div class="timeline-bar"><div class="timeline-fill" style="width:${width}%"></div></div>
+          <div class="meta">cost ${money(cost)} · in ${inputTokens} · out ${outputTokens}</div>
+          <div class="meta">${escapeHTML(lastText)}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderEventFeed(sw) {
+      const events = collectEvents(sw)
+        .filter((event) => !state.eventType || event.kind === state.eventType)
+        .slice(0, 120);
+      $("eventFeed").innerHTML = events.length ? events.map((event) => {
+        const ts = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : "";
+        const step = event.step ? ` · step ${event.step}` : "";
+        return `<div class="event ${escapeAttr(event.kind)}">
+          <strong>${escapeHTML(event.label)}</strong> <span class="meta">${escapeHTML(event.author || "")}${escapeHTML(step)} ${escapeHTML(ts)}</span>
+          <div>${highlight(event.text, state.traceQuery)}</div>
+        </div>`;
+      }).join("") : `<div class="empty">No live events match the current filter.</div>`;
+    }
+
+    function collectEvents(sw) {
+      const out = [];
+      for (const item of ((sw && sw.commentary) || [])) {
+        out.push({
+          kind: "update",
+          label: "agent update",
+          author: item.Agent || item.agent || "",
+          text: item.Content || item.content || "",
+          timestamp: item.Timestamp || item.timestamp || "",
+          step: item.Step || item.step || 0
+        });
+      }
+      for (const item of ((sw && sw.findings) || [])) {
+        const content = item.Content || item.content || "";
+        out.push({
+          kind: content.includes("FLAG") || content.includes("{") ? "flag" : "finding",
+          label: "shared finding",
+          author: item.Author || item.author || "",
+          text: content,
+          timestamp: item.Timestamp || item.timestamp || ""
+        });
+      }
+      for (const line of state.traceLines) {
+        const event = parseTraceLine(line);
+        if (!event) continue;
+        if (!["tool_call", "tool_result", "tool_error", "finish", "usage"].includes(event.type)) continue;
+        const data = event.data || {};
+        const text = data.error || data.result || data.arguments || data.text || JSON.stringify(data);
+        out.push({
+          kind: event.type === "finish" && data.flag ? "flag" : event.type,
+          label: event.type,
+          author: event.agent || "",
+          text,
+          timestamp: event.timestamp || "",
+          step: event.step || 0
+        });
+      }
+      return out.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/status", { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        state.status = await res.json();
+        renderStatus(state.status);
+      } catch (err) {
+        $("health").classList.remove("ok");
+        $("operatorMeta").textContent = `status unavailable: ${err.message}`;
+      }
+    }
+
+    async function loadTrace() {
+      const challenge = $("challengeSelect").value || state.selectedChallenge;
+      const model = $("modelSelect").value;
+      const last = Math.max(1, Math.min(300, Number($("lastInput").value || 40)));
+      state.selectedChallenge = challenge;
+      state.selectedModel = model;
+      if (!challenge) {
+        $("traceList").innerHTML = `<div class="empty">Select a challenge first.</div>`;
+        return;
+      }
+      $("traceList").innerHTML = `<div class="empty">Loading trace...</div>`;
+      const params = new URLSearchParams({ challenge, last: String(last) });
+      if (model) params.set("model", model);
+      try {
+        const res = await fetch(`/trace?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const body = await res.json();
+        state.traceLines = body.lines || [];
+        renderTrace();
+        renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
+      } catch (err) {
+        $("traceList").innerHTML = `<div class="empty">Trace unavailable: ${escapeHTML(err.message)}</div>`;
+      }
+    }
+
+    async function loadArtifacts(options = {}) {
+      const challenge = state.selectedChallenge;
+      if (!challenge) {
+        $("artifactList").innerHTML = `<div class="empty">Select a challenge first.</div>`;
+        return;
+      }
+      if (state.artifactLoading) return;
+      state.artifactLoading = true;
+      if (!options.silent) {
+        $("artifactList").innerHTML = `<div class="empty">Loading artifacts...</div>`;
+        state.selectedArtifact = "";
+        $("artifactPreviewTitle").textContent = "No artifact selected";
+        $("artifactPreview").textContent = "Select an artifact to preview.";
+      }
+      try {
+        const params = new URLSearchParams({ challenge });
+        const res = await fetch(`/artifacts?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const body = await res.json();
+        const files = body.files || [];
+        const signature = files.map((file) => `${file.path}:${file.size}:${file.is_dir}`).join("|");
+        if (!options.silent || signature !== state.artifactSignature || challenge !== state.artifactChallenge) {
+          state.artifactSignature = signature;
+          state.artifactChallenge = challenge;
+          renderArtifacts(files);
+        }
+      } catch (err) {
+        if (!options.silent) {
+          $("artifactList").innerHTML = `<div class="empty">Artifacts unavailable: ${escapeHTML(err.message)}</div>`;
+        }
+      } finally {
+        state.artifactLoading = false;
+      }
+    }
+
+    function renderArtifactListMessage() {
+      if (!$("artifactList").innerHTML.trim()) {
+        $("artifactList").innerHTML = `<div class="empty">Refresh artifacts to read the selected challenge workspace.</div>`;
+      }
+    }
+
+    function renderArtifacts(files) {
+      if (!files.length) {
+        $("artifactList").innerHTML = `<div class="empty">No workspace artifacts yet.</div>`;
+        return;
+      }
+      $("artifactList").innerHTML = files.map((file) => {
+        const icon = file.is_dir ? "DIR" : "FILE";
+        const size = file.is_dir ? "" : ` · ${formatBytes(file.size || 0)}`;
+        return `<div class="artifact ${file.is_dir ? "dir" : ""}" data-path="${escapeAttr(file.path)}" data-dir="${file.is_dir ? "1" : "0"}">
+          ${icon} ${escapeHTML(file.path)}${escapeHTML(size)}
+        </div>`;
+      }).join("");
+      $("artifactList").querySelectorAll("[data-path]").forEach((node) => {
+        if (node.dataset.dir === "1") return;
+        node.addEventListener("click", () => previewArtifact(node.dataset.path));
+      });
+      markSelectedArtifact();
+    }
+
+    async function previewArtifact(path) {
+      const challenge = state.selectedChallenge;
+      if (!challenge || !path) return;
+      state.selectedArtifact = path;
+      markSelectedArtifact();
+      $("artifactPreviewTitle").textContent = `${path} · loading`;
+      try {
+        const params = new URLSearchParams({ challenge, path });
+        const res = await fetch(`/artifacts?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const body = await res.json();
+        $("artifactPreviewTitle").textContent = path;
+        $("artifactPreview").textContent = body.content || "";
+      } catch (err) {
+        $("artifactPreviewTitle").textContent = path;
+        $("artifactPreview").textContent = `Preview unavailable: ${err.message}`;
+      }
+    }
+
+    function markSelectedArtifact() {
+      $("artifactList").querySelectorAll("[data-path]").forEach((node) => {
+        node.classList.toggle("selected", node.dataset.path === state.selectedArtifact);
+      });
+    }
+
+    function formatBytes(size) {
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function renderTrace() {
+      const query = state.traceQuery.trim().toLowerCase();
+      const lines = query ? state.traceLines.filter((line) => line.toLowerCase().includes(query)) : state.traceLines;
+      if (!lines.length) {
+        $("traceList").innerHTML = `<div class="empty">No trace lines returned.</div>`;
+        return;
+      }
+      $("traceList").innerHTML = lines.map((line) => {
+        let evt = parseTraceLine(line);
+        if (!evt) return `<div class="trace-row"><pre>${escapeHTML(line)}</pre></div>`;
+        const meta = [
+          evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : "",
+          evt.agent || "",
+          evt.step ? `step ${evt.step}` : "",
+          evt.tool || ""
+        ].filter(Boolean).map(escapeHTML).join(" · ");
+        const payload = evt.tokens ? evt.tokens : (evt.data || {});
+        return `<div class="trace-row">
+          <div class="trace-meta"><span class="trace-type">${escapeHTML(evt.type || "event")}</span><span>${meta}</span></div>
+          <pre>${highlight(JSON.stringify(payload, null, 2), state.traceQuery)}</pre>
+        </div>`;
+      }).join("");
+    }
+
+    function parseTraceLine(line) {
+      try { return JSON.parse(line); } catch (_) { return null; }
+    }
+
+    function highlight(value, query) {
+      const text = escapeHTML(value || "");
+      const needle = String(query || "").trim();
+      if (!needle) return text;
+      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return text.replace(new RegExp(escaped, "gi"), (match) => `<mark>${match}</mark>`);
+    }
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    function escapeAttr(value) {
+      return escapeHTML(value);
+    }
+
+    $("challengeSelect").addEventListener("change", (event) => {
+      state.selectedChallenge = event.target.value;
+      if (state.status) renderStatus(state.status);
+    });
+    $("modelSelect").addEventListener("change", (event) => {
+      state.selectedModel = event.target.value;
+    });
+    $("traceSearch").addEventListener("input", (event) => {
+      state.traceQuery = event.target.value;
+      renderTrace();
+      renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
+    });
+    $("eventTypeFilter").addEventListener("change", (event) => {
+      state.eventType = event.target.value;
+      renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
+    });
+    $("loadTrace").addEventListener("click", loadTrace);
+    $("loadArtifacts").addEventListener("click", () => loadArtifacts());
+
+    refresh();
+    setInterval(refresh, 3000);
+    setInterval(() => {
+      const active = state.status && state.status.active_challenges && state.status.active_challenges[state.selectedChallenge];
+      if ($("autoArtifacts").checked && active && active.active !== false) {
+        loadArtifacts({ silent: true });
+      }
+    }, 5000);
+  </script>
+</body>
+</html>

@@ -50,24 +50,34 @@ type Result struct {
 
 // Solver is a single AI agent solving one challenge.
 type Solver struct {
-	model     model.ToolCallingChatModel
-	sandbox   sandbox.Sandbox
-	bus       *bus.MessageBus
-	busCursor int
-	detector  *loopdetect.Detector
-	result    *Result
-	challenge string
-	agentName string
-	modelInfo models.SpecInfo
-	messages  []*schema.Message
-	tracer    *trace.Tracer
-	reporter  *sandboxTools.FlagReporter
-	costs     *cost.Tracker
-	stepCount int
-	mu        sync.Mutex
+	model      model.ToolCallingChatModel
+	sandbox    sandbox.Sandbox
+	bus        *bus.MessageBus
+	busCursor  int
+	detector   *loopdetect.Detector
+	result     *Result
+	challenge  string
+	agentName  string
+	modelInfo  models.SpecInfo
+	messages   []*schema.Message
+	tracer     *trace.Tracer
+	reporter   *sandboxTools.FlagReporter
+	costs      *cost.Tracker
+	commentary []Commentary
+	stepCount  int
+	mu         sync.Mutex
 }
 
 var commentaryMu sync.Mutex
+
+// Commentary is a short assistant progress update emitted before or after tool
+// calls. It is shown in the operator UI as a live finding stream.
+type Commentary struct {
+	Agent     string
+	Content   string
+	Timestamp time.Time
+	Step      int
+}
 
 // New creates a new solver instance.
 func New(m model.ToolCallingChatModel, sb sandbox.Sandbox, b *bus.MessageBus) *Solver {
@@ -247,9 +257,25 @@ func (s *Solver) emitCommentary(msg *schema.Message) {
 	s.traceEvent("commentary", s.currentStep(), "", map[string]any{
 		"text": text,
 	})
+	s.recordCommentary(text)
 	commentaryMu.Lock()
 	defer commentaryMu.Unlock()
 	fmt.Fprintf(os.Stderr, "[%s/%s] %s\n", s.challenge, s.agentName, text)
+}
+
+func (s *Solver) recordCommentary(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.commentary) >= 200 {
+		s.commentary = s.commentary[1:]
+	}
+	s.commentary = append(s.commentary, Commentary{
+		Agent:     s.agentName,
+		Content:   text,
+		Timestamp: time.Now(),
+		Step:      s.stepCount,
+	})
 }
 
 func (s *Solver) recordUsage(output *schema.Message) (inputTokens, outputTokens, cacheTokens int, costUSD float64) {
@@ -657,6 +683,15 @@ func extractFlag(text string) string {
 // History exposes the detector history for debugging.
 func (s *Solver) History() []string {
 	return s.detector.History()
+}
+
+func (s *Solver) Commentary() []Commentary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]Commentary, len(s.commentary))
+	copy(out, s.commentary)
+	return out
 }
 
 func (s *Solver) ModelID() string {

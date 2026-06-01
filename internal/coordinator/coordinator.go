@@ -130,6 +130,20 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 	return out
 }
 
+// SolveChallenge runs one named challenge through the coordinator and records
+// its result for the operator UI/status endpoints.
+func (c *Coordinator) SolveChallenge(ctx context.Context, challenge string) *solver.Result {
+	c.setContext(ctx)
+	result := c.solveOne(ctx, challenge)
+	c.mu.Lock()
+	c.results[challenge] = result
+	if result.Status == solver.FlagFound {
+		c.solved[challenge] = true
+	}
+	c.mu.Unlock()
+	return result
+}
+
 func (c *Coordinator) setContext(ctx context.Context) {
 	if ctx == nil {
 		return

@@ -19,9 +19,7 @@ import (
 	"github.com/verialabs/ctf-agent/internal/cost"
 	"github.com/verialabs/ctf-agent/internal/prompt"
 	"github.com/verialabs/ctf-agent/internal/sandbox"
-	"github.com/verialabs/ctf-agent/internal/skills"
 	"github.com/verialabs/ctf-agent/internal/solver"
-	"github.com/verialabs/ctf-agent/internal/swarm"
 )
 
 func main() {
@@ -86,9 +84,7 @@ func solveCmd(cfg *config.Config) *cobra.Command {
 			if url, err := coord.StartOperatorServer(ctx, cfg.MsgAddr); err != nil {
 				log.Printf("operator message server disabled: %v", err)
 			} else {
-				fmt.Printf("Operator: %s\n", url)
-				fmt.Printf("  status: %s/status\n", url)
-				fmt.Printf("  hint:   curl -X POST %s/msg -H 'Content-Type: application/json' -d '{\"message\":\"...\"}'\n\n", url)
+				printOperatorURLs(url)
 			}
 
 			results := coord.SolveAll(ctx)
@@ -102,14 +98,17 @@ func solveCmd(cfg *config.Config) *cobra.Command {
 }
 
 func singleCmd(cfg *config.Config) *cobra.Command {
-	return &cobra.Command{
+	var waitUI bool
+	cmd := &cobra.Command{
 		Use:   "single <challenge-dir>",
 		Short: "Solve a single challenge",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSingleChallenge(cfg, args[0])
+			return runSingleChallenge(cfg, args[0], waitUI)
 		},
 	}
+	cmd.Flags().BoolVar(&waitUI, "wait-ui", false, "Keep the operator UI running after the challenge finishes")
+	return cmd
 }
 
 func runCmd(cfg *config.Config) *cobra.Command {
@@ -118,6 +117,7 @@ func runCmd(cfg *config.Config) *cobra.Command {
 	var name string
 	var description string
 	var files []string
+	var waitUI bool
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -144,7 +144,7 @@ func runCmd(cfg *config.Config) *cobra.Command {
 				return err
 			}
 			fmt.Printf("Created challenge: %s\n", created.Dir)
-			return runSingleChallenge(cfg, created.Dir)
+			return runSingleChallenge(cfg, created.Dir, waitUI)
 		},
 	}
 
@@ -153,25 +153,15 @@ func runCmd(cfg *config.Config) *cobra.Command {
 	cmd.Flags().StringVar(&category, "category", "misc", "Challenge category, e.g. pwn, web, crypto, rev, forensics")
 	cmd.Flags().StringVar(&name, "name", "", "Challenge name; inferred from file or target when omitted")
 	cmd.Flags().StringVar(&description, "description", "", "Optional challenge description")
+	cmd.Flags().BoolVar(&waitUI, "wait-ui", false, "Keep the operator UI running after the challenge finishes")
 	return cmd
 }
 
-func runSingleChallenge(cfg *config.Config, challengeDir string) error {
+func runSingleChallenge(cfg *config.Config, challengeDir string, waitUI bool) error {
 	metaPath := filepath.Join(challengeDir, "metadata.yml")
 	meta, err := prompt.LoadMeta(metaPath)
 	if err != nil {
 		return fmt.Errorf("load metadata: %w", err)
-	}
-
-	sysPrompt := prompt.Build(meta,
-		filepath.Join(challengeDir, "distfiles"),
-		filepath.Join(challengeDir, "workspace"))
-	skillsPrompt, err := skills.LoadForCategory(cfg.SkillsDir, meta.Category)
-	if err != nil {
-		return err
-	}
-	if skillsPrompt != "" {
-		sysPrompt += "\n\n" + skillsPrompt
 	}
 
 	apiKeys := map[string]string{
@@ -200,8 +190,16 @@ func runSingleChallenge(cfg *config.Config, challengeDir string) error {
 	}
 
 	costTracker := cost.NewTracker()
-	sw := swarm.NewWithOptionsAndTracker(meta.Name, challengeDir, cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit, "", costTracker)
-	result := sw.Run(ctx, sysPrompt)
+	challengesDir := filepath.Dir(challengeDir)
+	challengeName := filepath.Base(challengeDir)
+	coord := coordinator.NewWithOptionsAndTracker(challengesDir,
+		cfg.ModelSpecs, apiKeys, cfg.SandboxImage, cfg.MemoryLimit, 1, cfg.SkillsDir, costTracker)
+	if url, err := coord.StartOperatorServer(ctx, cfg.MsgAddr); err != nil {
+		log.Printf("operator message server disabled: %v", err)
+	} else {
+		printOperatorURLs(url)
+	}
+	result := coord.SolveChallenge(ctx, challengeName)
 
 	printSingleResult(result)
 	if result.Flag != "" {
@@ -226,8 +224,19 @@ func runSingleChallenge(cfg *config.Config, challengeDir string) error {
 	}
 	fmt.Println()
 	fmt.Println(costTracker.Summary())
+	if waitUI {
+		fmt.Println("UI is still running. Press Ctrl+C to stop.")
+		<-ctx.Done()
+	}
 
 	return nil
+}
+
+func printOperatorURLs(url string) {
+	fmt.Printf("Operator: %s\n", url)
+	fmt.Printf("  ui:     %s/ui\n", url)
+	fmt.Printf("  status: %s/status\n", url)
+	fmt.Printf("  hint:   curl -X POST %s/msg -H 'Content-Type: application/json' -d '{\"message\":\"...\"}'\n\n", url)
 }
 
 func validateModelSpecs(specs []string, apiKeys map[string]string) error {
