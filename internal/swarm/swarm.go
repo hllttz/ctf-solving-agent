@@ -279,8 +279,12 @@ func (s *Swarm) Status() map[string]any {
 	agents := make(map[string]any, len(s.solvers))
 	var commentary []solver.Commentary
 	for spec, sol := range s.solvers {
+		solverCommentary := sol.Commentary()
 		agent := map[string]any{
 			"history_len": len(sol.History()),
+		}
+		if summary := sol.CurrentSummary(); summary != "" {
+			agent["summary"] = summary
 		}
 		if s.costs != nil {
 			key := spec + "/" + sol.ModelID()
@@ -290,7 +294,7 @@ func (s *Swarm) Status() map[string]any {
 			}
 		}
 		agents[spec] = agent
-		commentary = append(commentary, sol.Commentary()...)
+		commentary = append(commentary, solverCommentary...)
 	}
 	return map[string]any{
 		"challenge":  s.challengeName,

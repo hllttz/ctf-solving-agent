@@ -27,7 +27,7 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       letter-spacing: 0;
     }
-    button, input, select {
+    button, input, select, textarea {
       font: inherit;
     }
     .shell {
@@ -92,7 +92,7 @@
       gap: 12px;
       margin-bottom: 18px;
     }
-    .stat, .section, .challenge, .trace-row {
+    .stat, .section, .challenge {
       background: var(--panel);
       border: 2px solid var(--line);
       box-shadow: 4px 4px 0 var(--shadow);
@@ -189,6 +189,7 @@
     .badge.solved { background: #c9eadc; color: #0d5135; }
     .badge.error { background: #f0d0ca; color: #7c241c; }
     .badge.cancelled { background: #ddd8cd; }
+    .badge.ready { background: #e8e0cc; color: #514b3f; }
     .agents {
       display: flex;
       flex-wrap: wrap;
@@ -203,50 +204,120 @@
       max-width: 100%;
       overflow-wrap: anywhere;
     }
-    .findings {
-      display: grid;
-      gap: 8px;
-      max-height: 320px;
-      overflow: auto;
-      padding-right: 4px;
-    }
-    .finding {
-      border-left: 4px solid var(--blue);
-      background: #f8f3e7;
-      padding: 9px 10px;
+    h3 {
+      margin: 0 0 10px;
       font-size: 12px;
-      line-height: 1.5;
-      overflow-wrap: anywhere;
+      line-height: 1.2;
+      text-transform: uppercase;
     }
-    .finding time {
-      color: var(--muted);
-      display: block;
-      margin-top: 5px;
-    }
-    .trace-list {
+    .operator-grid {
       display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .operator-card {
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      padding: 12px;
+      min-width: 0;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
-      max-height: 620px;
-      overflow: auto;
-      padding-right: 4px;
+      align-items: end;
     }
-    .trace-row {
-      padding: 11px;
-      box-shadow: none;
+    .field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
     }
-    .trace-meta {
+    .field.wide {
+      grid-column: 1 / -1;
+    }
+    .field label, .checkline {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      text-transform: uppercase;
+    }
+    textarea {
+      border: 2px solid var(--line);
+      background: #fffaf0;
+      color: var(--ink);
+      padding: 8px 10px;
+      min-height: 88px;
+      resize: vertical;
+      max-width: 100%;
+    }
+    input[type="file"] {
+      background: #fffdf6;
+      padding: 7px 8px;
+    }
+    input[type="checkbox"] {
+      width: auto;
+      min-height: 0;
+    }
+    .checkline {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      text-transform: none;
+    }
+    .button-row {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       align-items: center;
-      color: var(--muted);
-      font-size: 11px;
-      margin-bottom: 8px;
     }
-    .trace-type {
-      color: var(--ink);
+    button.secondary {
+      background: #fffdf6;
+      color: var(--line);
+    }
+    button.danger {
+      background: var(--red);
+      color: #fffdf6;
+    }
+    .notice {
+      margin-top: 10px;
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .notice.ok { color: var(--green); }
+    .notice.error { color: var(--red); }
+    .summary-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .summary-item {
+      border: 1px solid var(--line);
+      background: #fffaf0;
+      padding: 10px;
+      min-width: 0;
+    }
+    .summary-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      align-items: start;
+    }
+    .summary-agent {
+      font-size: 12px;
       font-weight: 700;
-      text-transform: uppercase;
+      overflow-wrap: anywhere;
+    }
+    .summary-body {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .timeline {
       display: grid;
@@ -254,12 +325,14 @@
       max-height: 360px;
       overflow: auto;
       padding-right: 4px;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .timeline-row {
       border: 1px solid var(--line);
       background: #fffaf0;
       padding: 10px;
       min-width: 0;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .timeline-head {
       display: flex;
@@ -291,6 +364,7 @@
       max-height: 430px;
       overflow: auto;
       padding-right: 4px;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .event {
       border-left: 4px solid var(--line);
@@ -299,17 +373,15 @@
       font-size: 12px;
       line-height: 1.45;
       overflow-wrap: anywhere;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .event.update { border-left-color: var(--blue); }
     .event.finding { border-left-color: var(--green); }
     .event.tool_call { border-left-color: var(--amber); }
+    .event.tool_result { border-left-color: var(--blue); }
     .event.tool_error { border-left-color: var(--red); }
+    .event.usage { border-left-color: var(--muted); }
     .event.flag { border-left-color: var(--green); background: #edf7e8; }
-    mark {
-      background: #ffe38a;
-      color: var(--ink);
-      padding: 0 2px;
-    }
     pre {
       margin: 0;
       white-space: pre-wrap;
@@ -325,6 +397,7 @@
       gap: 12px;
       align-items: stretch;
       min-height: 392px;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .artifact-list {
       display: flex;
@@ -334,6 +407,7 @@
       overflow: auto;
       padding-right: 4px;
       min-width: 0;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .artifact {
       border: 1px solid var(--line);
@@ -344,6 +418,7 @@
       overflow-wrap: anywhere;
       min-height: 34px;
       flex: 0 0 auto;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .artifact.dir {
       cursor: default;
@@ -366,6 +441,7 @@
       overflow: hidden;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .artifact-preview-title {
       border-bottom: 1px solid rgba(255, 248, 221, .22);
@@ -376,6 +452,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .artifact-preview {
       margin: 0;
@@ -385,6 +462,7 @@
       padding: 12px;
       background: transparent;
       color: inherit;
+      font-family: Consolas, "Liberation Mono", Menlo, monospace !important;
     }
     .empty {
       border: 2px dashed var(--line);
@@ -413,13 +491,18 @@
       aside { position: relative; height: auto; border-right: 0; border-bottom: 2px solid var(--line); }
       .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid { grid-template-columns: 1fr; }
+      .operator-grid { grid-template-columns: 1fr; }
+      .summary-list { grid-template-columns: 1fr; }
       .artifact-layout { grid-template-columns: 1fr; }
     }
     @media (max-width: 560px) {
       main { padding: 14px; }
       .stats { grid-template-columns: 1fr; }
       .toolbar { align-items: stretch; }
+      .form-grid { grid-template-columns: 1fr; }
+      .button-row { align-items: stretch; }
       select, input, button { width: 100%; }
+      input[type="checkbox"] { width: auto; }
     }
   </style>
 </head>
@@ -457,6 +540,80 @@
         </section>
       </div>
       <section class="section" style="margin-top:18px">
+        <h2>Operator Console</h2>
+        <div class="operator-grid">
+          <div class="operator-card">
+            <h3>Upload Challenge</h3>
+            <form id="uploadForm" class="form-grid">
+              <div class="field">
+                <label for="uploadName">Name</label>
+                <input id="uploadName" name="name" type="text" placeholder="inferred from file">
+              </div>
+              <div class="field">
+                <label for="uploadCategory">Category</label>
+                <select id="uploadCategory" name="category">
+                  <option value="misc">misc</option>
+                  <option value="web">web</option>
+                  <option value="pwn">pwn</option>
+                  <option value="rev">rev</option>
+                  <option value="crypto">crypto</option>
+                  <option value="forensics">forensics</option>
+                </select>
+              </div>
+              <div class="field wide">
+                <label for="uploadTarget">Target</label>
+                <input id="uploadTarget" name="target" type="text" placeholder="nc host 31337 or https://target">
+              </div>
+              <div class="field wide">
+                <label for="uploadDescription">Description</label>
+                <textarea id="uploadDescription" name="description" placeholder="challenge prompt, hints, constraints"></textarea>
+              </div>
+              <div class="field wide">
+                <label for="uploadFiles">Files</label>
+                <input id="uploadFiles" name="files" type="file" multiple>
+              </div>
+              <div class="field wide">
+                <label class="checkline"><input id="uploadAutostart" name="autostart" type="checkbox" checked> Start immediately after upload</label>
+              </div>
+              <div class="field wide">
+                <button id="uploadSubmit" type="submit">Upload Challenge</button>
+              </div>
+            </form>
+            <div id="uploadNotice" class="notice"></div>
+          </div>
+          <div class="operator-card">
+            <h3>Human Intervention</h3>
+            <div class="form-grid">
+              <div class="field">
+                <label for="controlChallenge">Challenge</label>
+                <select id="controlChallenge"></select>
+              </div>
+              <div class="field">
+                <label for="controlModel">Model</label>
+                <select id="controlModel"></select>
+              </div>
+              <div class="field wide">
+                <label for="operatorMessage">Guidance</label>
+                <textarea id="operatorMessage" placeholder="Tell solvers what to try next, what to avoid, or what clue matters"></textarea>
+              </div>
+              <div class="field wide">
+                <div class="button-row">
+                  <button id="sendGuidance" type="button">Send Guidance</button>
+                  <button id="bumpModel" type="button" class="secondary">Bump Model</button>
+                  <button id="spawnChallenge" type="button" class="secondary">Start Challenge</button>
+                  <button id="killChallenge" type="button" class="danger">Kill Challenge</button>
+                </div>
+              </div>
+            </div>
+            <div id="controlNotice" class="notice"></div>
+          </div>
+        </div>
+      </section>
+      <section class="section" style="margin-top:18px">
+        <h2>Current Model Summaries</h2>
+        <div id="modelSummaries" class="summary-list"></div>
+      </section>
+      <section class="section" style="margin-top:18px">
         <h2>Live Event Feed</h2>
         <div class="toolbar">
           <select id="eventTypeFilter" aria-label="Event type">
@@ -464,29 +621,16 @@
             <option value="update">updates</option>
             <option value="finding">findings</option>
             <option value="tool_call">tool calls</option>
+            <option value="tool_result">tool results</option>
             <option value="tool_error">tool errors</option>
+            <option value="usage">usage</option>
             <option value="flag">flags</option>
           </select>
+          <button id="loadTrace" type="button" class="secondary">Refresh Trace</button>
+          <span id="traceMeta" class="meta">trace: select a live model</span>
         </div>
         <div id="eventFeed" class="event-feed"></div>
       </section>
-      <div class="grid" style="margin-top:18px">
-        <section class="section">
-          <h2>Trace Viewer</h2>
-          <div class="toolbar">
-            <select id="challengeSelect" aria-label="Challenge"></select>
-            <select id="modelSelect" aria-label="Model"></select>
-            <input id="lastInput" type="number" min="1" max="300" value="40" aria-label="Trace lines">
-            <input id="traceSearch" type="search" placeholder="Search trace" aria-label="Trace search">
-            <button id="loadTrace">Load</button>
-          </div>
-          <div id="traceList" class="trace-list"></div>
-        </section>
-        <section class="section">
-          <h2>Findings</h2>
-          <div id="findings" class="findings"></div>
-        </section>
-      </div>
       <section class="section" style="margin-top:18px">
         <h2>Artifacts</h2>
         <div class="toolbar">
@@ -509,12 +653,16 @@
       selectedChallenge: "",
       selectedModel: "",
       selectedArtifact: "",
-      traceLines: [],
-      traceQuery: "",
       eventType: "",
       artifactSignature: "",
       artifactChallenge: "",
-      artifactLoading: false
+      artifactLoading: false,
+      traceEvents: [],
+      traceKey: "",
+      traceLoading: false,
+      traceLoadingKey: "",
+      traceError: "",
+      traceLoadedAt: 0
     };
     const $ = (id) => document.getElementById(id);
 
@@ -527,6 +675,7 @@
       if (text === "solved") return "solved";
       if (text === "error" || text === "gave up") return "error";
       if (text === "cancelled") return "cancelled";
+      if (text === "ready") return "ready";
       return "running";
     }
 
@@ -538,23 +687,17 @@
       return String(name || "").replace(/^.*\//, "");
     }
 
-    function modelOptions(status) {
-      const out = new Set();
-      for (const sw of Object.values(status.active_challenges || {})) {
-        for (const model of Object.keys((sw && sw.agents) || {})) out.add(model);
-      }
-      for (const key of Object.keys(status.usage || {})) {
-        const firstSlash = key.indexOf("/");
-        if (firstSlash > -1) out.add(key.slice(0, firstSlash));
-      }
-      return Array.from(out).sort();
-    }
-
     function challengeNames(status) {
       return Array.from(new Set([
+        ...(status.local_challenges || []),
         ...Object.keys(status.active_challenges || {}),
         ...Object.keys(status.results || {})
       ])).sort();
+    }
+
+    function agentNamesFor(status, challenge) {
+      const sw = status && status.active_challenges && status.active_challenges[challenge];
+      return Object.keys((sw && sw.agents) || {}).sort();
     }
 
     function renderStatus(status) {
@@ -569,35 +712,20 @@
       $("operatorMeta").innerHTML = [
         `endpoint: ${location.origin}`,
         `refreshed: ${new Date().toLocaleTimeString()}`,
-        `mode: read only`
+        `mode: operator`
       ].join("<br>");
 
       if (!state.selectedChallenge && names.length) state.selectedChallenge = names[0];
-      renderChallengeSelect(names);
-      renderModelSelect(modelOptions(status));
       renderUsage(status.usage || {});
       renderChallenges(names, active, results);
+      renderControlOptions(status, names);
       const selected = active[state.selectedChallenge];
       renderTimeline(selected);
-      renderFindings(selected);
+      renderModelSummaries(selected);
       renderEventFeed(selected);
+      renderTraceMeta();
+      maybeRefreshTrace(selected);
       renderArtifactListMessage();
-    }
-
-    function renderChallengeSelect(names) {
-      const sel = $("challengeSelect");
-      const current = state.selectedChallenge;
-      sel.innerHTML = names.map((name) => `<option value="${escapeAttr(name)}">${escapeHTML(name)}</option>`).join("");
-      if (current) sel.value = current;
-    }
-
-    function renderModelSelect(models) {
-      const sel = $("modelSelect");
-      const options = ['<option value="">latest trace</option>'].concat(
-        models.map((name) => `<option value="${escapeAttr(name)}">${escapeHTML(shortName(name))}</option>`)
-      );
-      sel.innerHTML = options.join("");
-      sel.value = state.selectedModel;
     }
 
     function renderUsage(usage) {
@@ -618,7 +746,7 @@
       list.innerHTML = names.map((name) => {
         const sw = active[name];
         const result = results[name];
-        const text = sw && sw.active !== false ? "running" : statusText(result);
+        const text = sw && sw.active !== false ? "running" : result ? statusText(result) : "ready";
         const agents = Object.keys((sw && sw.agents) || {});
         return `<article class="challenge ${name === state.selectedChallenge ? "selected" : ""}" data-challenge="${escapeAttr(name)}">
           <div class="challenge-head">
@@ -632,6 +760,8 @@
         node.addEventListener("click", () => {
           if (state.selectedChallenge !== node.dataset.challenge) {
             state.selectedArtifact = "";
+            state.selectedModel = "";
+            resetTraceState();
             $("artifactList").innerHTML = "";
             $("artifactPreviewTitle").textContent = "No artifact selected";
             $("artifactPreview").textContent = "Refresh artifacts to read the selected challenge workspace.";
@@ -642,29 +772,26 @@
       });
     }
 
-    function renderFindings(sw) {
-      const shared = ((sw && sw.findings) || []).map((item) => ({
-        author: item.Author || item.author || "unknown",
-        content: item.Content || item.content || "",
-        timestamp: item.Timestamp || item.timestamp || "",
-        kind: "shared"
-      }));
-      const commentary = ((sw && sw.commentary) || []).map((item) => ({
-        author: item.Agent || item.agent || "unknown",
-        content: item.Content || item.content || "",
-        timestamp: item.Timestamp || item.timestamp || "",
-        step: item.Step || item.step || 0,
-        kind: "update"
-      }));
-      const items = shared.concat(commentary).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-      $("findings").innerHTML = items.length ? items.map((item) => {
-        const step = item.step ? ` · step ${item.step}` : "";
-        return `<div class="finding">
-          <strong>${escapeHTML(item.author)}</strong> <span class="meta">${escapeHTML(item.kind)}${escapeHTML(step)}</span>
-          <div>${escapeHTML(item.content)}</div>
-          ${item.timestamp ? `<time>${escapeHTML(new Date(item.timestamp).toLocaleString())}</time>` : ""}
-        </div>`;
-      }).join("") : `<div class="empty">No shared findings or live agent updates for the selected challenge.</div>`;
+    function renderControlOptions(status, names) {
+      const challengeSelect = $("controlChallenge");
+      const currentChallenge = state.selectedChallenge;
+      challengeSelect.innerHTML = names.length ? names.map((name) => {
+        const active = status.active_challenges && status.active_challenges[name];
+        const label = active && active.active !== false ? `${name} (running)` : name;
+        return `<option value="${escapeAttr(name)}">${escapeHTML(label)}</option>`;
+      }).join("") : `<option value="">no challenges</option>`;
+      challengeSelect.value = currentChallenge;
+
+      const models = agentNamesFor(status, currentChallenge);
+      const previousModel = state.selectedModel;
+      if (!state.selectedModel || !models.includes(state.selectedModel)) {
+        state.selectedModel = models[0] || "";
+      }
+      if (state.selectedModel !== previousModel) resetTraceState();
+      $("controlModel").innerHTML = models.length ? models.map((name) => (
+        `<option value="${escapeAttr(name)}">${escapeHTML(shortName(name))}</option>`
+      )).join("") : `<option value="">no live models</option>`;
+      $("controlModel").value = state.selectedModel;
     }
 
     function renderTimeline(sw) {
@@ -697,16 +824,76 @@
       }).join("");
     }
 
+    function renderModelSummaries(sw) {
+      const summaries = currentSummaries(sw);
+      $("modelSummaries").innerHTML = summaries.length ? summaries.map((item) => {
+        return `<div class="summary-item">
+          <div class="summary-head">
+            <div class="summary-agent">${escapeHTML(shortName(item.agent))}</div>
+            <span class="meta">${escapeHTML(item.kind)}${item.step ? escapeHTML(` · step ${item.step}`) : ""}</span>
+          </div>
+          <div class="summary-body">${escapeHTML(item.text)}</div>
+        </div>`;
+      }).join("") : `<div class="empty">No current model summaries for the selected challenge yet.</div>`;
+    }
+
+    function currentSummaries(sw) {
+      if (!sw) return [];
+      const byAgent = new Map();
+      for (const [agent, info] of Object.entries(sw.agents || {})) {
+        const text = stringsTrim(info.summary || "");
+        if (!agent || !text) continue;
+        byAgent.set(agent, {
+          agent,
+          text,
+          kind: "summary",
+          timestamp: "",
+          step: 0
+        });
+      }
+      for (const item of (sw.commentary || [])) {
+        const agent = item.Agent || item.agent || "";
+        const text = stringsTrim(item.Content || item.content || "");
+        if (!agent || !text) continue;
+        byAgent.set(agent, {
+          agent,
+          text,
+          kind: "summary",
+          timestamp: item.Timestamp || item.timestamp || "",
+          step: item.Step || item.step || 0
+        });
+      }
+      for (const item of (sw.findings || [])) {
+        const agent = item.Author || item.author || "";
+        const text = stringsTrim(item.Content || item.content || "");
+        if (!agent || !text || agent === "coordinator" || agent === "coordinator_notification") continue;
+        const prev = byAgent.get(agent);
+        const nextTS = new Date(item.Timestamp || item.timestamp || 0);
+        const prevTS = new Date((prev && prev.timestamp) || 0);
+        if (!prev || nextTS >= prevTS) {
+          byAgent.set(agent, {
+            agent,
+            text,
+            kind: "finding",
+            timestamp: item.Timestamp || item.timestamp || "",
+            step: 0
+          });
+        }
+      }
+      return Array.from(byAgent.values()).sort((a, b) => a.agent.localeCompare(b.agent));
+    }
+
     function renderEventFeed(sw) {
-      const events = collectEvents(sw)
+      const events = collectEvents(sw).concat(currentTraceEvents())
         .filter((event) => !state.eventType || event.kind === state.eventType)
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
         .slice(0, 120);
       $("eventFeed").innerHTML = events.length ? events.map((event) => {
         const ts = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : "";
         const step = event.step ? ` · step ${event.step}` : "";
         return `<div class="event ${escapeAttr(event.kind)}">
           <strong>${escapeHTML(event.label)}</strong> <span class="meta">${escapeHTML(event.author || "")}${escapeHTML(step)} ${escapeHTML(ts)}</span>
-          <div>${highlight(event.text, state.traceQuery)}</div>
+          <div>${escapeHTML(event.text)}</div>
         </div>`;
       }).join("") : `<div class="empty">No live events match the current filter.</div>`;
     }
@@ -733,22 +920,176 @@
           timestamp: item.Timestamp || item.timestamp || ""
         });
       }
-      for (const line of state.traceLines) {
-        const event = parseTraceLine(line);
-        if (!event) continue;
-        if (!["tool_call", "tool_result", "tool_error", "finish", "usage"].includes(event.type)) continue;
-        const data = event.data || {};
-        const text = data.error || data.result || data.arguments || data.text || JSON.stringify(data);
-        out.push({
-          kind: event.type === "finish" && data.flag ? "flag" : event.type,
-          label: event.type,
-          author: event.agent || "",
-          text,
-          timestamp: event.timestamp || "",
-          step: event.step || 0
-        });
-      }
       return out.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    }
+
+    function currentTraceKey() {
+      if (!state.selectedChallenge || !state.selectedModel) return "";
+      return `${state.selectedChallenge}::${state.selectedModel}`;
+    }
+
+    function resetTraceState() {
+      state.traceEvents = [];
+      state.traceKey = "";
+      state.traceLoading = false;
+      state.traceLoadingKey = "";
+      state.traceError = "";
+      state.traceLoadedAt = 0;
+    }
+
+    function currentTraceEvents() {
+      if (!state.traceKey || state.traceKey !== currentTraceKey()) return [];
+      return state.traceEvents || [];
+    }
+
+    function maybeRefreshTrace(sw) {
+      const key = currentTraceKey();
+      if (!key) {
+        if (state.traceKey) resetTraceState();
+        renderTraceMeta();
+        return;
+      }
+      if (state.traceKey !== key) {
+        resetTraceState();
+        state.traceKey = key;
+        refreshTrace({ silent: true });
+        return;
+      }
+      const running = sw && sw.active !== false;
+      if (running && !state.traceLoading && Date.now() - state.traceLoadedAt > 7000) {
+        refreshTrace({ silent: true });
+      }
+    }
+
+    function renderTraceMeta() {
+      const node = $("traceMeta");
+      if (!node) return;
+      if (!currentTraceKey()) {
+        node.textContent = "trace: select a live model";
+        return;
+      }
+      if (state.traceLoading && state.traceLoadingKey === currentTraceKey()) {
+        node.textContent = `trace: loading ${shortName(state.selectedModel)}`;
+        return;
+      }
+      if (state.traceError) {
+        node.textContent = `trace: unavailable for ${shortName(state.selectedModel)}`;
+        return;
+      }
+      if (!state.traceLoadedAt) {
+        node.textContent = `trace: ready for ${shortName(state.selectedModel)}`;
+        return;
+      }
+      node.textContent = `trace: ${state.traceEvents.length} events from ${shortName(state.selectedModel)} at ${new Date(state.traceLoadedAt).toLocaleTimeString()}`;
+    }
+
+    async function refreshTrace(options = {}) {
+      const challenge = state.selectedChallenge;
+      const model = state.selectedModel;
+      const key = currentTraceKey();
+      if (!key || state.traceLoading) {
+        renderTraceMeta();
+        return;
+      }
+      state.traceLoading = true;
+      state.traceLoadingKey = key;
+      state.traceKey = key;
+      state.traceError = "";
+      if (!options.silent) {
+        state.traceEvents = [];
+        renderEventFeed(selectedSwarm());
+      }
+      renderTraceMeta();
+      try {
+        const params = new URLSearchParams({ challenge, model, last: "80" });
+        const res = await fetch(`/trace?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const body = await res.json();
+        const events = parseTraceLines(body.lines || []);
+        if (state.traceLoadingKey !== key || currentTraceKey() !== key) return;
+        state.traceEvents = events;
+        state.traceError = "";
+        state.traceLoadedAt = Date.now();
+      } catch (err) {
+        if (state.traceLoadingKey === key && currentTraceKey() === key) {
+          state.traceEvents = [];
+          state.traceError = err.message;
+          state.traceLoadedAt = Date.now();
+        }
+      } finally {
+        if (state.traceLoadingKey === key) {
+          state.traceLoading = false;
+          state.traceLoadingKey = "";
+          renderTraceMeta();
+          renderEventFeed(selectedSwarm());
+        }
+      }
+    }
+
+    function selectedSwarm() {
+      return (state.status && state.status.active_challenges || {})[state.selectedChallenge];
+    }
+
+    function parseTraceLines(lines) {
+      return lines.map((line) => {
+        try { return traceEventToFeed(JSON.parse(line)); } catch (_) { return null; }
+      }).filter(Boolean);
+    }
+
+    function traceEventToFeed(evt) {
+      const type = evt.type || "";
+      const data = evt.data || {};
+      const tool = evt.tool || "";
+      const base = {
+        author: evt.agent || "",
+        timestamp: evt.timestamp || "",
+        step: evt.step || 0
+      };
+      if (type === "tool_call") {
+        return { ...base, kind: "tool_call", label: `tool call${tool ? `: ${tool}` : ""}`, text: compactText(data.arguments || data) };
+      }
+      if (type === "tool_result") {
+        return { ...base, kind: "tool_result", label: `tool result${tool ? `: ${tool}` : ""}`, text: compactText(data.result || data) };
+      }
+      if (type === "tool_error") {
+        return { ...base, kind: "tool_error", label: `tool error${tool ? `: ${tool}` : ""}`, text: compactText(data.error || data) };
+      }
+      if (type === "usage") {
+        const tokens = evt.tokens || {};
+        return { ...base, kind: "usage", label: "token usage", text: `in ${tokens.input || 0} / out ${tokens.output || 0}${tokens.cache ? ` / cache ${tokens.cache}` : ""}` };
+      }
+      if (type === "findings_injected") {
+        return { ...base, kind: "finding", label: "findings injected", text: compactText(data.findings || data) };
+      }
+      if (type === "finish") {
+        const flag = data.flag ? ` flag ${data.flag}` : "";
+        const method = data.method ? ` method ${data.method}` : "";
+        return { ...base, kind: data.flag ? "flag" : "update", label: "solver finished", text: `status ${data.status}${flag}${method}` };
+      }
+      if (type === "model_response") {
+        return { ...base, kind: "update", label: "model response", text: compactText(data.text || data) };
+      }
+      if (type === "bump") {
+        return { ...base, kind: "update", label: "solver bump", text: compactText(data.insights || data) };
+      }
+      if (type === "error") {
+        return { ...base, kind: "tool_error", label: "solver error", text: compactText(data.error || data) };
+      }
+      if (type === "start") {
+        return { ...base, kind: "update", label: "solver start", text: compactText(data) };
+      }
+      return null;
+    }
+
+    function compactText(value) {
+      let text = "";
+      if (typeof value === "string") {
+        text = value;
+      } else {
+        try { text = JSON.stringify(value); } catch (_) { text = String(value); }
+      }
+      text = stringsTrim(text);
+      return text.length > 1200 ? `${text.slice(0, 1200)}...` : text;
     }
 
     async function refresh() {
@@ -763,29 +1104,105 @@
       }
     }
 
-    async function loadTrace() {
-      const challenge = $("challengeSelect").value || state.selectedChallenge;
-      const model = $("modelSelect").value;
-      const last = Math.max(1, Math.min(300, Number($("lastInput").value || 40)));
-      state.selectedChallenge = challenge;
-      state.selectedModel = model;
-      if (!challenge) {
-        $("traceList").innerHTML = `<div class="empty">Select a challenge first.</div>`;
+    async function uploadChallenge(event) {
+      event.preventDefault();
+      const notice = $("uploadNotice");
+      setNotice(notice, "Uploading challenge...", "");
+      $("uploadSubmit").disabled = true;
+      try {
+        const form = new FormData($("uploadForm"));
+        form.set("autostart", $("uploadAutostart").checked ? "true" : "false");
+        const res = await fetch("/upload", { method: "POST", body: form });
+        const body = await readResponse(res);
+        if (!res.ok) throw new Error(body);
+        state.selectedChallenge = body.challenge || state.selectedChallenge;
+        setNotice(notice, `${body.challenge} uploaded${body.started ? " and started" : ""}.`, "ok");
+        $("uploadForm").reset();
+        $("uploadAutostart").checked = true;
+        await refresh();
+      } catch (err) {
+        setNotice(notice, err.message, "error");
+      } finally {
+        $("uploadSubmit").disabled = false;
+      }
+    }
+
+    async function sendGuidance() {
+      const challenge = $("controlChallenge").value || state.selectedChallenge;
+      const message = stringsTrim($("operatorMessage").value);
+      if (!message) {
+        setNotice($("controlNotice"), "Guidance is required.", "error");
         return;
       }
-      $("traceList").innerHTML = `<div class="empty">Loading trace...</div>`;
-      const params = new URLSearchParams({ challenge, last: String(last) });
-      if (model) params.set("model", model);
-      try {
-        const res = await fetch(`/trace?${params.toString()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(await res.text());
-        const body = await res.json();
-        state.traceLines = body.lines || [];
-        renderTrace();
-        renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
-      } catch (err) {
-        $("traceList").innerHTML = `<div class="empty">Trace unavailable: ${escapeHTML(err.message)}</div>`;
+      await postJSON("/broadcast", { challenge, message }, (body) => {
+        $("operatorMessage").value = "";
+        setNotice($("controlNotice"), `Guidance sent to ${body.broadcast_to || 0} swarm(s).`, "ok");
+      });
+    }
+
+    async function bumpModel() {
+      const challenge = $("controlChallenge").value || state.selectedChallenge;
+      const model = $("controlModel").value;
+      const insights = stringsTrim($("operatorMessage").value);
+      if (!challenge || !model) {
+        setNotice($("controlNotice"), "Select a running challenge and model first.", "error");
+        return;
       }
+      await postJSON("/bump", { challenge, model, insights }, () => {
+        setNotice($("controlNotice"), `Bump queued for ${shortName(model)}.`, "ok");
+      });
+    }
+
+    async function spawnChallenge() {
+      const challenge = $("controlChallenge").value || state.selectedChallenge;
+      if (!challenge) {
+        setNotice($("controlNotice"), "Select a challenge first.", "error");
+        return;
+      }
+      await postJSON("/spawn", { challenge }, () => {
+        setNotice($("controlNotice"), `${challenge} started.`, "ok");
+        refresh();
+      });
+    }
+
+    async function killChallenge() {
+      const challenge = $("controlChallenge").value || state.selectedChallenge;
+      if (!challenge) {
+        setNotice($("controlNotice"), "Select a running challenge first.", "error");
+        return;
+      }
+      await postJSON("/kill", { challenge }, () => {
+        setNotice($("controlNotice"), `${challenge} cancellation requested.`, "ok");
+        refresh();
+      });
+    }
+
+    async function postJSON(path, payload, onOK) {
+      const notice = $("controlNotice");
+      setNotice(notice, "Sending...", "");
+      try {
+        const res = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const body = await readResponse(res);
+        if (!res.ok) throw new Error(body);
+        onOK(body);
+      } catch (err) {
+        setNotice(notice, err.message, "error");
+      }
+    }
+
+    async function readResponse(res) {
+      const text = await res.text();
+      try { return text ? JSON.parse(text) : {}; } catch (_) { return stringsTrim(text); }
+    }
+
+    function setNotice(node, text, kind) {
+      node.textContent = text || "";
+      node.classList.toggle("ok", kind === "ok");
+      node.classList.toggle("error", kind === "error");
     }
 
     async function loadArtifacts(options = {}) {
@@ -879,40 +1296,8 @@
       return `${(size / 1024 / 1024).toFixed(1)} MB`;
     }
 
-    function renderTrace() {
-      const query = state.traceQuery.trim().toLowerCase();
-      const lines = query ? state.traceLines.filter((line) => line.toLowerCase().includes(query)) : state.traceLines;
-      if (!lines.length) {
-        $("traceList").innerHTML = `<div class="empty">No trace lines returned.</div>`;
-        return;
-      }
-      $("traceList").innerHTML = lines.map((line) => {
-        let evt = parseTraceLine(line);
-        if (!evt) return `<div class="trace-row"><pre>${escapeHTML(line)}</pre></div>`;
-        const meta = [
-          evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : "",
-          evt.agent || "",
-          evt.step ? `step ${evt.step}` : "",
-          evt.tool || ""
-        ].filter(Boolean).map(escapeHTML).join(" · ");
-        const payload = evt.tokens ? evt.tokens : (evt.data || {});
-        return `<div class="trace-row">
-          <div class="trace-meta"><span class="trace-type">${escapeHTML(evt.type || "event")}</span><span>${meta}</span></div>
-          <pre>${highlight(JSON.stringify(payload, null, 2), state.traceQuery)}</pre>
-        </div>`;
-      }).join("");
-    }
-
-    function parseTraceLine(line) {
-      try { return JSON.parse(line); } catch (_) { return null; }
-    }
-
-    function highlight(value, query) {
-      const text = escapeHTML(value || "");
-      const needle = String(query || "").trim();
-      if (!needle) return text;
-      const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return text.replace(new RegExp(escaped, "gi"), (match) => `<mark>${match}</mark>`);
+    function stringsTrim(value) {
+      return String(value || "").trim();
     }
 
     function escapeHTML(value) {
@@ -925,23 +1310,31 @@
       return escapeHTML(value);
     }
 
-    $("challengeSelect").addEventListener("change", (event) => {
+    $("uploadForm").addEventListener("submit", uploadChallenge);
+    $("controlChallenge").addEventListener("change", (event) => {
       state.selectedChallenge = event.target.value;
+      state.selectedModel = "";
+      state.selectedArtifact = "";
+      resetTraceState();
+      $("artifactList").innerHTML = "";
+      $("artifactPreviewTitle").textContent = "No artifact selected";
+      $("artifactPreview").textContent = "Refresh artifacts to read the selected challenge workspace.";
       if (state.status) renderStatus(state.status);
     });
-    $("modelSelect").addEventListener("change", (event) => {
+    $("controlModel").addEventListener("change", (event) => {
       state.selectedModel = event.target.value;
+      resetTraceState();
+      if (state.status) renderStatus(state.status);
     });
-    $("traceSearch").addEventListener("input", (event) => {
-      state.traceQuery = event.target.value;
-      renderTrace();
-      renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
-    });
+    $("sendGuidance").addEventListener("click", sendGuidance);
+    $("bumpModel").addEventListener("click", bumpModel);
+    $("spawnChallenge").addEventListener("click", spawnChallenge);
+    $("killChallenge").addEventListener("click", killChallenge);
     $("eventTypeFilter").addEventListener("change", (event) => {
       state.eventType = event.target.value;
       renderEventFeed((state.status && state.status.active_challenges || {})[state.selectedChallenge]);
     });
-    $("loadTrace").addEventListener("click", loadTrace);
+    $("loadTrace").addEventListener("click", () => refreshTrace());
     $("loadArtifacts").addEventListener("click", () => loadArtifacts());
 
     refresh();

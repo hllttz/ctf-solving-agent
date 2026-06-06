@@ -694,6 +694,16 @@ func (s *Solver) Commentary() []Commentary {
 	return out
 }
 
+func (s *Solver) CurrentSummary() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.commentary) == 0 {
+		return ""
+	}
+	return s.commentary[len(s.commentary)-1].Content
+}
+
 func (s *Solver) ModelID() string {
 	return s.modelInfo.ModelID
 }

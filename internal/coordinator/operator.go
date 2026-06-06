@@ -5,16 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/verialabs/ctf-agent/internal/challenge"
 )
 
 // StartOperatorServer starts a small local HTTP endpoint for broadcasting
 // operator messages to active swarms.
 func (c *Coordinator) StartOperatorServer(ctx context.Context, addr string) (string, error) {
+	c.setContext(ctx)
 	if strings.TrimSpace(addr) == "" {
 		addr = "127.0.0.1:0"
 	}
@@ -25,6 +30,7 @@ func (c *Coordinator) StartOperatorServer(ctx context.Context, addr string) (str
 	mux.HandleFunc("/notifications", c.handleOperatorNotifications)
 	mux.HandleFunc("/trace", c.handleOperatorTrace)
 	mux.HandleFunc("/artifacts", c.handleOperatorArtifacts)
+	mux.HandleFunc("/upload", c.handleOperatorUpload)
 	mux.HandleFunc("/ui", c.handleOperatorUI)
 	mux.HandleFunc("/ui/", c.handleOperatorUI)
 	mux.HandleFunc("/broadcast", c.handleOperatorBroadcast)
@@ -84,10 +90,12 @@ func (c *Coordinator) handleOperatorStatus(w http.ResponseWriter, _ *http.Reques
 	}
 	c.mu.Unlock()
 
+	localChallenges, _ := c.DiscoverChallenges()
 	writeJSON(w, map[string]any{
 		"summary":           c.Summary(),
 		"active_challenges": active,
 		"results":           c.Results(),
+		"local_challenges":  localChallenges,
 		"total_cost_usd":    c.TotalCost(),
 		"usage":             c.CostSnapshot(),
 	})
@@ -182,6 +190,78 @@ func (c *Coordinator) handleOperatorArtifacts(w http.ResponseWriter, r *http.Req
 		"path":    filepath.ToSlash(filepath.Clean(rel)),
 		"size":    info.Size(),
 		"content": string(data),
+	})
+}
+
+func (c *Coordinator) handleOperatorUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+
+	const maxUploadBytes = 512 << 20
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		http.Error(w, "invalid multipart upload", http.StatusBadRequest)
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ctf-agent-upload-*")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var files []string
+	seen := make(map[string]int)
+	if r.MultipartForm != nil {
+		for _, headers := range r.MultipartForm.File {
+			for _, header := range headers {
+				path, err := saveUploadedFile(header, tmpDir, seen)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				files = append(files, path)
+			}
+		}
+	}
+
+	target := strings.TrimSpace(r.FormValue("target"))
+	if target == "" && len(files) == 0 {
+		http.Error(w, "provide at least a target or one file", http.StatusBadRequest)
+		return
+	}
+
+	created, err := challenge.CreateManual(challenge.ManualOptions{
+		Root:        c.challengesDir,
+		Name:        r.FormValue("name"),
+		Category:    r.FormValue("category"),
+		Target:      target,
+		Description: r.FormValue("description"),
+		Files:       files,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	challengeName := filepath.Base(created.Dir)
+	started := false
+	if formBool(r, "autostart") {
+		started = c.Spawn(nil, challengeName)
+	}
+	writeJSON(w, map[string]any{
+		"ok":        true,
+		"challenge": challengeName,
+		"name":      created.Name,
+		"dir":       created.Dir,
+		"files":     created.Files,
+		"started":   started,
 	})
 }
 
@@ -455,6 +535,64 @@ func tracePart(s string) string {
 	s = strings.ReplaceAll(s, " ", "_")
 	s = strings.ReplaceAll(s, ":", "_")
 	return s
+}
+
+func saveUploadedFile(header *multipart.FileHeader, dstDir string, seen map[string]int) (string, error) {
+	if header == nil || strings.TrimSpace(header.Filename) == "" {
+		return "", fmt.Errorf("uploaded file is missing a filename")
+	}
+	src, err := header.Open()
+	if err != nil {
+		return "", fmt.Errorf("open upload %s: %w", header.Filename, err)
+	}
+	defer src.Close()
+
+	name := uniqueUploadName(uploadBaseName(header.Filename), seen)
+	dst := filepath.Join(dstDir, name)
+	out, err := os.Create(dst)
+	if err != nil {
+		return "", fmt.Errorf("create upload temp file: %w", err)
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, src); err != nil {
+		return "", fmt.Errorf("save upload %s: %w", header.Filename, err)
+	}
+	return dst, nil
+}
+
+func uploadBaseName(name string) string {
+	name = strings.TrimSpace(strings.ReplaceAll(name, "\\", "/"))
+	name = filepath.Base(name)
+	if name == "." || name == string(filepath.Separator) {
+		return "attachment"
+	}
+	return name
+}
+
+func uniqueUploadName(name string, seen map[string]int) string {
+	if strings.TrimSpace(name) == "" {
+		name = "attachment"
+	}
+	count := seen[name]
+	seen[name] = count + 1
+	if count == 0 {
+		return name
+	}
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	if stem == "" {
+		stem = "attachment"
+	}
+	return fmt.Sprintf("%s-%d%s", stem, count+1, ext)
+}
+
+func formBool(r *http.Request, name string) bool {
+	switch strings.ToLower(strings.TrimSpace(r.FormValue(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
