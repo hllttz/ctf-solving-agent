@@ -117,9 +117,9 @@ func NewListFilesTool(sb sandbox.Sandbox) *ListFilesTool { return &ListFilesTool
 func (t *ListFilesTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "list_files",
-		Desc: "List files in a sandbox directory (runs ls -la).",
+		Desc: "List files in a sandbox directory (runs ls -la). Defaults to /challenge/distfiles.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path": {Type: schema.String, Desc: "Directory path (default: workspace)", Required: false},
+			"path": {Type: schema.String, Desc: "Directory path (default: /challenge/distfiles)", Required: false},
 		}),
 	}, nil
 }
@@ -132,7 +132,7 @@ func (t *ListFilesTool) InvokableRun(ctx context.Context, argsJSON string, _ ...
 		return "", fmt.Errorf("list_files: %w", err)
 	}
 	if args.Path == "" {
-		args.Path = t.sb.Workspace()
+		args.Path = t.sb.Distfiles()
 	}
 	return t.sb.ListFiles(args.Path)
 }
