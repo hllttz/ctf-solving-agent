@@ -129,9 +129,9 @@ func NewWriteFileTool(sb sandbox.Sandbox) *WriteFileTool { return &WriteFileTool
 func (t *WriteFileTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "write_file",
-		Desc: "Write content to a file in the sandbox workspace.",
+		Desc: "Write content to a file in the sandbox workspace. Relative paths are written under /workspace.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path":    {Type: schema.String, Desc: "Absolute path to write", Required: true},
+			"path":    {Type: schema.String, Desc: "Path to write. Relative paths resolve under /workspace.", Required: true},
 			"content": {Type: schema.String, Desc: "Content to write", Required: true},
 		}),
 	}, nil
@@ -145,10 +145,22 @@ func (t *WriteFileTool) InvokableRun(_ context.Context, argsJSON string, _ ...to
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("write_file: %w", err)
 	}
-	if err := t.sb.WriteFile(args.Path, args.Content); err != nil {
+	target := writeFilePath(t.sb, strings.TrimSpace(args.Path))
+	if err := t.sb.WriteFile(target, args.Content); err != nil {
 		return "", err
 	}
-	return "File written successfully.", nil
+	return fmt.Sprintf("File written successfully: %s", target), nil
+}
+
+func writeFilePath(sb sandbox.Sandbox, requested string) string {
+	if requested == "" || path.IsAbs(requested) {
+		return requested
+	}
+	candidates := challengeRelativeCandidates(requested, sb.Workspace())
+	if len(candidates) == 0 {
+		return requested
+	}
+	return candidates[0]
 }
 
 // ListFilesTool lists files in sandbox directories.

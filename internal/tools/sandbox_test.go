@@ -13,6 +13,8 @@ type toolSandbox struct {
 	files        map[string]string
 	listed       string
 	readAttempts []string
+	writtenPath  string
+	writtenData  string
 }
 
 func (s *toolSandbox) Exec(context.Context, string) (string, error) {
@@ -39,7 +41,9 @@ func (s *toolSandbox) ReadFileBytes(string) ([]byte, error) {
 	return nil, nil
 }
 
-func (s *toolSandbox) WriteFile(string, string) error {
+func (s *toolSandbox) WriteFile(path, content string) error {
+	s.writtenPath = path
+	s.writtenData = content
 	return nil
 }
 
@@ -179,5 +183,50 @@ func TestReadFileRelativePathDoesNotEscapeChallengeDirs(t *testing.T) {
 	}
 	if got == "metadata" {
 		t.Fatal("escaped relative path read metadata")
+	}
+}
+
+func TestWriteFileRelativePathWritesUnderWorkspace(t *testing.T) {
+	sb := &toolSandbox{}
+	tool := NewWriteFileTool(sb)
+
+	got, err := tool.InvokableRun(context.Background(), `{"path":"scripts/solve.py","content":"print(1)\n"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun: %v", err)
+	}
+	if sb.writtenPath != "/workspace/scripts/solve.py" {
+		t.Fatalf("written path = %q, want /workspace/scripts/solve.py", sb.writtenPath)
+	}
+	if sb.writtenData != "print(1)\n" {
+		t.Fatalf("written content = %q", sb.writtenData)
+	}
+	if got != "File written successfully: /workspace/scripts/solve.py" {
+		t.Fatalf("result = %q", got)
+	}
+}
+
+func TestWriteFileAbsolutePathUsesExactPath(t *testing.T) {
+	sb := &toolSandbox{}
+	tool := NewWriteFileTool(sb)
+
+	_, err := tool.InvokableRun(context.Background(), `{"path":"/tmp/solve.py","content":"x"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun: %v", err)
+	}
+	if sb.writtenPath != "/tmp/solve.py" {
+		t.Fatalf("written path = %q, want /tmp/solve.py", sb.writtenPath)
+	}
+}
+
+func TestWriteFileRelativePathDoesNotEscapeWorkspace(t *testing.T) {
+	sb := &toolSandbox{}
+	tool := NewWriteFileTool(sb)
+
+	_, err := tool.InvokableRun(context.Background(), `{"path":"../metadata.yml","content":"x"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun: %v", err)
+	}
+	if sb.writtenPath != "../metadata.yml" {
+		t.Fatalf("written path = %q, want ../metadata.yml", sb.writtenPath)
 	}
 }
