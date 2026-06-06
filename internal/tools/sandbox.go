@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -68,11 +70,32 @@ func (t *ReadFileTool) InvokableRun(_ context.Context, argsJSON string, _ ...too
 	if err := unmarshalArgs(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
-	content, err := t.sb.ReadFile(args.Path)
-	if err != nil {
-		return fmt.Sprintf("read_file failed for %q: %v\nTry list_files on the parent directory or use bash to inspect the path.", args.Path, err), nil
+	requested := strings.TrimSpace(args.Path)
+	var tried []string
+	var lastErr error
+	for _, candidate := range readFileCandidates(t.sb, requested) {
+		tried = append(tried, candidate)
+		content, err := t.sb.ReadFile(candidate)
+		if err == nil {
+			return content, nil
+		}
+		lastErr = err
 	}
-	return content, nil
+	return fmt.Sprintf("read_file failed for %q: %v\nTried: %s\nTry list_files on the parent directory or use bash to inspect the path.", requested, lastErr, strings.Join(tried, ", ")), nil
+}
+
+func readFileCandidates(sb sandbox.Sandbox, requested string) []string {
+	if requested == "" || path.IsAbs(requested) {
+		return []string{requested}
+	}
+	rel := path.Clean(strings.ReplaceAll(requested, "\\", "/"))
+	if rel == "." {
+		return []string{requested}
+	}
+	return []string{
+		path.Join(sb.Distfiles(), rel),
+		path.Join(sb.Workspace(), rel),
+	}
 }
 
 // WriteFileTool writes content to files in the sandbox workspace.
