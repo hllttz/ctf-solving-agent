@@ -105,3 +105,27 @@ func TestReserveChallengeRejectsActiveSwarm(t *testing.T) {
 		t.Fatalf("reserved challenge with active swarm")
 	}
 }
+
+func TestConcurrencyLimit(t *testing.T) {
+	tests := []struct {
+		name           string
+		maxConcurrent  int
+		challengeCount int
+		want           int
+	}{
+		{name: "normal cap", maxConcurrent: 2, challengeCount: 5, want: 2},
+		{name: "zero means unbounded", maxConcurrent: 0, challengeCount: 5, want: 5},
+		{name: "negative means unbounded", maxConcurrent: -1, challengeCount: 5, want: 5},
+		{name: "cap above challenge count", maxConcurrent: 10, challengeCount: 3, want: 3},
+		{name: "empty challenge list still safe", maxConcurrent: 0, challengeCount: 0, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			coord := New(t.TempDir(), []string{"anthropic/test"}, nil, "ctf-sandbox", tt.maxConcurrent)
+			if got := coord.concurrencyLimit(tt.challengeCount); got != tt.want {
+				t.Fatalf("concurrencyLimit(%d) = %d, want %d", tt.challengeCount, got, tt.want)
+			}
+		})
+	}
+}

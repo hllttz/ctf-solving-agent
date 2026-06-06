@@ -101,7 +101,7 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 	log.Printf("[coordinator] Found %d challenges", len(challenges))
 
 	// Semaphore for concurrency control
-	sem := make(chan struct{}, c.maxConcurrent)
+	sem := make(chan struct{}, c.concurrencyLimit(len(challenges)))
 	var wg sync.WaitGroup
 
 	for _, ch := range challenges {
@@ -251,6 +251,16 @@ func (c *Coordinator) activeCountLocked() int {
 		}
 	}
 	return active
+}
+
+func (c *Coordinator) concurrencyLimit(challengeCount int) int {
+	if challengeCount <= 0 {
+		return 1
+	}
+	if c.maxConcurrent <= 0 || c.maxConcurrent > challengeCount {
+		return challengeCount
+	}
+	return c.maxConcurrent
 }
 
 func initialStrategy(meta *prompt.Meta) string {
