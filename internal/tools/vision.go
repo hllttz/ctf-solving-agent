@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	pathpkg "path"
 	"strings"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -90,21 +89,9 @@ func candidateImagePaths(path string) []string {
 	}
 	candidates := []string{path}
 	if !strings.HasPrefix(path, "/") {
-		rel := pathpkgClean(path)
-		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
-			return candidates
-		}
-		candidates = append(candidates,
-			pathpkg.Join("/challenge/distfiles", rel),
-			pathpkg.Join("/workspace", rel),
-			pathpkg.Join("/challenge/workspace", rel),
-		)
+		candidates = append(candidates, challengeRelativeCandidates(path, "/challenge/distfiles", "/workspace", "/challenge/workspace")...)
 	}
 	return candidates
-}
-
-func pathpkgClean(p string) string {
-	return pathpkg.Clean(strings.ReplaceAll(p, "\\", "/"))
 }
 
 func detectImageMime(data []byte) string {

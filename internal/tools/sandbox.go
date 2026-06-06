@@ -88,19 +88,23 @@ func readFileCandidates(sb sandbox.Sandbox, requested string) []string {
 	if requested == "" || path.IsAbs(requested) {
 		return []string{requested}
 	}
-	rel := path.Clean(strings.ReplaceAll(requested, "\\", "/"))
-	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
-		return []string{requested}
-	}
-	candidates := make([]string, 0, 2)
-	if candidate, ok := safeJoin(sb.Distfiles(), rel); ok {
-		candidates = append(candidates, candidate)
-	}
-	if candidate, ok := safeJoin(sb.Workspace(), rel); ok {
-		candidates = append(candidates, candidate)
-	}
+	candidates := challengeRelativeCandidates(requested, sb.Distfiles(), sb.Workspace())
 	if len(candidates) == 0 {
 		return []string{requested}
+	}
+	return candidates
+}
+
+func challengeRelativeCandidates(requested string, bases ...string) []string {
+	rel := cleanRelativePath(requested)
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		return nil
+	}
+	candidates := make([]string, 0, len(bases))
+	for _, base := range bases {
+		if candidate, ok := safeJoin(base, rel); ok {
+			candidates = append(candidates, candidate)
+		}
 	}
 	return candidates
 }
@@ -109,6 +113,10 @@ func safeJoin(base, rel string) (string, bool) {
 	base = path.Clean(base)
 	joined := path.Join(base, rel)
 	return joined, joined == base || strings.HasPrefix(joined, base+"/")
+}
+
+func cleanRelativePath(p string) string {
+	return path.Clean(strings.ReplaceAll(p, "\\", "/"))
 }
 
 // WriteFileTool writes content to files in the sandbox workspace.
