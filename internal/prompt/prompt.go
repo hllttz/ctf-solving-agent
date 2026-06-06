@@ -3,6 +3,8 @@ package prompt
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -48,6 +50,7 @@ func LoadMeta(path string) (*Meta, error) {
 // Build generates the system prompt for a challenge solver.
 func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	var b strings.Builder
+	files := promptFiles(meta.Files, distfilesPath)
 
 	// Header
 	b.WriteString("You are an autonomous CTF (Capture The Flag) solving agent.\n")
@@ -101,9 +104,9 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	}
 
 	// Distfiles
-	if len(meta.Files) > 0 {
+	if len(files) > 0 {
 		b.WriteString("## Provided Files (in /challenge/distfiles/)\n")
-		for _, f := range meta.Files {
+		for _, f := range files {
 			b.WriteString(fmt.Sprintf("- %s\n", f))
 			if hint := fileHint(f); hint != "" {
 				b.WriteString(fmt.Sprintf("  Hint: %s\n", hint))
@@ -129,7 +132,7 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 
 	// Category-specific guidance
 	b.WriteString(categoryGuidance(meta.Category))
-	b.WriteString(generalAnalysisGuidance(meta))
+	b.WriteString(generalAnalysisGuidance(meta, files))
 
 	// Instructions
 	b.WriteString("## Instructions\n")
@@ -150,6 +153,37 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	b.WriteString("11. If JSON is impossible, output `FLAG: <value>` on its own line.\n")
 
 	return b.String()
+}
+
+func promptFiles(metadataFiles []string, distfilesPath string) []string {
+	seen := make(map[string]bool)
+	files := make([]string, 0, len(metadataFiles))
+	add := func(name string) {
+		name = filepath.ToSlash(strings.TrimSpace(name))
+		name = strings.TrimPrefix(name, "/challenge/distfiles/")
+		name = strings.TrimPrefix(name, "distfiles/")
+		if name == "" || name == "." || seen[name] {
+			return
+		}
+		seen[name] = true
+		files = append(files, name)
+	}
+
+	for _, name := range metadataFiles {
+		add(name)
+	}
+
+	entries, err := os.ReadDir(distfilesPath)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.Type().IsRegular() {
+				add(entry.Name())
+			}
+		}
+	}
+
+	sort.Strings(files)
+	return files
 }
 
 func connectionCommand(meta *Meta) string {
@@ -241,9 +275,9 @@ func webURL(meta *Meta) string {
 	return connURL(meta) + "/"
 }
 
-func generalAnalysisGuidance(meta *Meta) string {
+func generalAnalysisGuidance(meta *Meta, files []string) string {
 	var b strings.Builder
-	if hasImage(meta.Files) {
+	if hasImage(files) {
 		b.WriteString(`## Image Guidance
 - Call view_image first for image files.
 - If view_image reports corruption, inspect and repair magic bytes with xxd/file before retrying.
@@ -251,7 +285,7 @@ func generalAnalysisGuidance(meta *Meta) string {
 
 `)
 	}
-	if shouldIncludeBinaryGuidance(meta) {
+	if shouldIncludeBinaryGuidance(meta, files) {
 		b.WriteString(`## Binary Analysis Tools
 - pyghidra is available for decompilation. Example:
   python3 - <<'PY'
@@ -280,13 +314,13 @@ func hasImage(files []string) bool {
 	return false
 }
 
-func shouldIncludeBinaryGuidance(meta *Meta) bool {
+func shouldIncludeBinaryGuidance(meta *Meta, files []string) bool {
 	cat := strings.ToLower(meta.Category)
 	if cat == "" || strings.Contains(cat, "pwn") || strings.Contains(cat, "rev") ||
 		strings.Contains(cat, "reverse") || strings.Contains(cat, "binary") || strings.Contains(cat, "misc") {
 		return true
 	}
-	for _, name := range meta.Files {
+	for _, name := range files {
 		lower := strings.ToLower(name)
 		if strings.HasSuffix(lower, ".elf") || strings.HasSuffix(lower, ".so") ||
 			strings.HasSuffix(lower, ".exe") || strings.HasSuffix(lower, ".bin") {
