@@ -15,13 +15,8 @@ import (
 )
 
 var httpClient = &http.Client{
-	Timeout: 15 * time.Second,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 5 {
-			return fmt.Errorf("too many redirects")
-		}
-		return nil
-	},
+	Timeout:       15 * time.Second,
+	CheckRedirect: checkWebFetchRedirect,
 }
 
 var blockedCIDRs = []string{
@@ -36,8 +31,21 @@ func isBlocked(host string) bool {
 		if err != nil || len(addrs) == 0 {
 			return false
 		}
-		ip = addrs[0]
+		return hasBlockedIP(addrs)
 	}
+	return isBlockedIP(ip)
+}
+
+func hasBlockedIP(ips []net.IP) bool {
+	for _, ip := range ips {
+		if isBlockedIP(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func isBlockedIP(ip net.IP) bool {
 	for _, cidr := range blockedCIDRs {
 		_, block, _ := net.ParseCIDR(cidr)
 		if block != nil && block.Contains(ip) {
@@ -45,6 +53,19 @@ func isBlocked(host string) bool {
 		}
 	}
 	return false
+}
+
+func checkWebFetchRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return fmt.Errorf("too many redirects")
+	}
+	if req != nil && req.URL != nil {
+		host := req.URL.Hostname()
+		if isBlocked(host) {
+			return fmt.Errorf("blocked redirect: %s is an internal/private address", host)
+		}
+	}
+	return nil
 }
 
 // WebFetchTool performs HTTP GET requests.
