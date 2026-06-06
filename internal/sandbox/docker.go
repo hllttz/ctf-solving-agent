@@ -204,14 +204,23 @@ func (s *DockerSandbox) WriteFile(path, content string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i",
-		s.containerName, "tee", path, ">", "/dev/null")
+	args := dockerWriteFileArgs(s.containerName, path)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(content)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("write_file: %w: %s", err, string(output))
 	}
 	return nil
+}
+
+func dockerWriteFileArgs(containerName, targetPath string) []string {
+	dir := filepath.Dir(targetPath)
+	command := "tee " + shellEscape(targetPath) + " > /dev/null"
+	if dir != "." && dir != "/" {
+		command = "mkdir -p " + shellEscape(dir) + " && " + command
+	}
+	return []string{"docker", "exec", "-i", containerName, "bash", "-c", command}
 }
 
 func (s *DockerSandbox) ListFiles(dir string) (string, error) {
