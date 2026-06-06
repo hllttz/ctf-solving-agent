@@ -89,13 +89,26 @@ func readFileCandidates(sb sandbox.Sandbox, requested string) []string {
 		return []string{requested}
 	}
 	rel := path.Clean(strings.ReplaceAll(requested, "\\", "/"))
-	if rel == "." {
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
 		return []string{requested}
 	}
-	return []string{
-		path.Join(sb.Distfiles(), rel),
-		path.Join(sb.Workspace(), rel),
+	candidates := make([]string, 0, 2)
+	if candidate, ok := safeJoin(sb.Distfiles(), rel); ok {
+		candidates = append(candidates, candidate)
 	}
+	if candidate, ok := safeJoin(sb.Workspace(), rel); ok {
+		candidates = append(candidates, candidate)
+	}
+	if len(candidates) == 0 {
+		return []string{requested}
+	}
+	return candidates
+}
+
+func safeJoin(base, rel string) (string, bool) {
+	base = path.Clean(base)
+	joined := path.Join(base, rel)
+	return joined, joined == base || strings.HasPrefix(joined, base+"/")
 }
 
 // WriteFileTool writes content to files in the sandbox workspace.

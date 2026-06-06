@@ -160,3 +160,24 @@ func TestReadFileAbsolutePathUsesExactPath(t *testing.T) {
 		t.Fatalf("read attempts = %#v, want %#v", sb.readAttempts, wantAttempts)
 	}
 }
+
+func TestReadFileRelativePathDoesNotEscapeChallengeDirs(t *testing.T) {
+	sb := &toolSandbox{
+		files: map[string]string{
+			"/challenge/metadata.yml": "metadata",
+		},
+	}
+	tool := NewReadFileTool(sb)
+
+	got, err := tool.InvokableRun(context.Background(), `{"path":"../metadata.yml"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun: %v", err)
+	}
+	wantAttempts := []string{"../metadata.yml"}
+	if !reflect.DeepEqual(sb.readAttempts, wantAttempts) {
+		t.Fatalf("read attempts = %#v, want %#v", sb.readAttempts, wantAttempts)
+	}
+	if got == "metadata" {
+		t.Fatal("escaped relative path read metadata")
+	}
+}
