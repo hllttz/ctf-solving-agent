@@ -1,0 +1,46 @@
+package coordinator
+
+import (
+	"testing"
+
+	"github.com/verialabs/ctf-agent/internal/solver"
+	"github.com/verialabs/ctf-agent/internal/swarm"
+)
+
+func TestRecordResultRemovesFinishedSwarm(t *testing.T) {
+	coord := New(t.TempDir(), []string{"anthropic/test"}, nil, "ctf-sandbox", 1)
+	coord.swarms["baby"] = swarm.New("baby", t.TempDir(), nil, nil, "ctf-sandbox")
+
+	result := &solver.Result{Status: solver.FlagFound, Flag: "ctf{ok}"}
+	coord.recordResult("baby", result)
+
+	if coord.swarms["baby"] != nil {
+		t.Fatalf("finished swarm was not removed")
+	}
+	if coord.results["baby"] != result {
+		t.Fatalf("result was not recorded")
+	}
+	if !coord.solved["baby"] {
+		t.Fatalf("solved flag was not recorded")
+	}
+}
+
+func TestRecordResultHandlesNilResult(t *testing.T) {
+	coord := New(t.TempDir(), []string{"anthropic/test"}, nil, "ctf-sandbox", 1)
+	coord.swarms["baby"] = swarm.New("baby", t.TempDir(), nil, nil, "ctf-sandbox")
+
+	coord.recordResult("baby", nil)
+
+	if coord.swarms["baby"] != nil {
+		t.Fatalf("finished swarm was not removed")
+	}
+	if _, ok := coord.results["baby"]; !ok {
+		t.Fatalf("nil result was not recorded")
+	}
+	if coord.solved["baby"] {
+		t.Fatalf("nil result marked challenge solved")
+	}
+	if got := coord.Summary(); got != "Solved 0/1 challenges" {
+		t.Fatalf("summary = %q", got)
+	}
+}

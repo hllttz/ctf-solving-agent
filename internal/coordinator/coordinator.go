@@ -110,12 +110,7 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 			defer func() { <-sem }()
 
 			result := c.solveOne(ctx, challenge)
-			c.mu.Lock()
-			c.results[challenge] = result
-			if result.Status == solver.FlagFound {
-				c.solved[challenge] = true
-			}
-			c.mu.Unlock()
+			c.recordResult(challenge, result)
 		}(ch)
 	}
 
@@ -135,12 +130,7 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 func (c *Coordinator) SolveChallenge(ctx context.Context, challenge string) *solver.Result {
 	c.setContext(ctx)
 	result := c.solveOne(ctx, challenge)
-	c.mu.Lock()
-	c.results[challenge] = result
-	if result.Status == solver.FlagFound {
-		c.solved[challenge] = true
-	}
-	c.mu.Unlock()
+	c.recordResult(challenge, result)
 	return result
 }
 
@@ -210,14 +200,20 @@ func (c *Coordinator) Spawn(ctx context.Context, challenge string) bool {
 
 	go func() {
 		result := c.solveOne(ctx, challenge)
-		c.mu.Lock()
-		c.results[challenge] = result
-		if result.Status == solver.FlagFound {
-			c.solved[challenge] = true
-		}
-		c.mu.Unlock()
+		c.recordResult(challenge, result)
 	}()
 	return true
+}
+
+func (c *Coordinator) recordResult(challenge string, result *solver.Result) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.results[challenge] = result
+	delete(c.swarms, challenge)
+	if result != nil && result.Status == solver.FlagFound {
+		c.solved[challenge] = true
+	}
 }
 
 func initialStrategy(meta *prompt.Meta) string {
@@ -251,7 +247,7 @@ func (c *Coordinator) Summary() string {
 	solved := 0
 	total := len(c.results)
 	for _, r := range c.results {
-		if r.Status == solver.FlagFound {
+		if r != nil && r.Status == solver.FlagFound {
 			solved++
 		}
 	}
