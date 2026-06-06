@@ -12,6 +12,7 @@ const CoordinatorNotificationAuthor = "coordinator_notification"
 type Finding struct {
 	Author    string
 	Content   string
+	Target    string `json:",omitempty"`
 	Timestamp time.Time
 }
 
@@ -29,6 +30,12 @@ func New() *MessageBus {
 
 // Post adds a finding to the bus.
 func (b *MessageBus) Post(author, content string) {
+	b.PostTo(author, "", content)
+}
+
+// PostTo adds a finding targeted at a specific solver. An empty target is
+// visible to all solvers.
+func (b *MessageBus) PostTo(author, target, content string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -38,6 +45,7 @@ func (b *MessageBus) Post(author, content string) {
 	b.findings = append(b.findings, Finding{
 		Author:    author,
 		Content:   content,
+		Target:    target,
 		Timestamp: time.Now(),
 	})
 }
@@ -69,6 +77,9 @@ func (b *MessageBus) CheckFor(author string, cursor int) ([]Finding, int) {
 	out := make([]Finding, 0, len(b.findings)-cursor)
 	for _, item := range b.findings[cursor:] {
 		if item.Author != author {
+			if item.Target != "" && item.Target != author {
+				continue
+			}
 			out = append(out, item)
 		}
 	}

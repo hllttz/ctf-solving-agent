@@ -31,6 +31,8 @@ type Swarm struct {
 	mu      sync.Mutex
 	results []*solver.Result
 	solvers map[string]*solver.Solver
+	bumps   map[string][]string
+	bumpCh  map[string]chan struct{}
 	done    chan struct{}
 	cancel  context.CancelFunc
 }
@@ -66,6 +68,8 @@ func NewWithOptionsAndTracker(name, dir string, modelSpecs []string, apiKeys map
 		costs:         costs,
 		bus:           bus.New(),
 		solvers:       make(map[string]*solver.Solver),
+		bumps:         make(map[string][]string),
+		bumpCh:        make(map[string]chan struct{}),
 		done:          make(chan struct{}),
 	}
 }
@@ -113,6 +117,7 @@ func (s *Swarm) Run(ctx context.Context, systemPrompt string) *solver.Result {
 		}
 		s.mu.Lock()
 		s.solvers[spec] = inst.s
+		s.bumpSignalLocked(spec)
 		s.mu.Unlock()
 		instances = append(instances, inst)
 	}
@@ -190,13 +195,22 @@ func (s *Swarm) runSolverLoop(ctx context.Context, systemPrompt string, inst sol
 			break
 		}
 
-		delay := time.Duration(bump*30) * time.Second
-		if !sleepOrCancelled(ctx, delay) {
-			break
+		insights, targeted := s.takePendingBump(inst.modelID)
+		if !targeted {
+			delay := time.Duration(bump*30) * time.Second
+			if !s.waitForBumpOrDelay(ctx, inst.modelID, delay) {
+				break
+			}
+			insights, targeted = s.takePendingBump(inst.modelID)
 		}
-
-		insights := s.gatherSiblingInsights(inst.modelID)
-		log.Printf("[swarm:%s/%s] bump %d with sibling insights", s.challengeName, inst.modelID, bump)
+		if !targeted {
+			insights = s.gatherSiblingInsights(inst.modelID)
+		}
+		source := "sibling insights"
+		if targeted {
+			source = "operator guidance"
+		}
+		log.Printf("[swarm:%s/%s] bump %d with %s", s.challengeName, inst.modelID, bump, source)
 		next := recvResult(ctx, inst.s.Bump(ctx, systemPrompt, insights))
 		if next == nil {
 			break
@@ -268,8 +282,69 @@ func (s *Swarm) Bump(modelSpec, insights string) bool {
 	if _, ok := s.solvers[modelSpec]; !ok {
 		return false
 	}
-	s.bus.Post(bus.CoordinatorAuthor, fmt.Sprintf("Targeted bump for %s: %s", modelSpec, insights))
+	insights = strings.TrimSpace(insights)
+	if insights == "" {
+		insights = "Operator requested a targeted retry. Re-read your trace, avoid repeated dead ends, and try a materially different approach."
+	}
+	s.bumps[modelSpec] = append(s.bumps[modelSpec], insights)
+	s.signalBumpLocked(modelSpec)
+	s.bus.PostTo(bus.CoordinatorAuthor, modelSpec, fmt.Sprintf("Targeted operator guidance: %s", insights))
 	return true
+}
+
+func (s *Swarm) takePendingBump(modelSpec string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	items := s.bumps[modelSpec]
+	if len(items) == 0 {
+		return "", false
+	}
+	insights := items[0]
+	if len(items) == 1 {
+		delete(s.bumps, modelSpec)
+	} else {
+		s.bumps[modelSpec] = append([]string(nil), items[1:]...)
+	}
+	return insights, true
+}
+
+func (s *Swarm) waitForBumpOrDelay(ctx context.Context, modelSpec string, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	ch := s.bumpSignal(modelSpec)
+	select {
+	case <-timer.C:
+		return true
+	case <-ch:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (s *Swarm) bumpSignal(modelSpec string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bumpSignalLocked(modelSpec)
+}
+
+func (s *Swarm) bumpSignalLocked(modelSpec string) chan struct{} {
+	if ch := s.bumpCh[modelSpec]; ch != nil {
+		return ch
+	}
+	ch := make(chan struct{}, 1)
+	s.bumpCh[modelSpec] = ch
+	return ch
+}
+
+func (s *Swarm) signalBumpLocked(modelSpec string) {
+	ch := s.bumpSignalLocked(modelSpec)
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }
 
 func (s *Swarm) Status() map[string]any {
