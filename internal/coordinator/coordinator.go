@@ -30,6 +30,7 @@ type Coordinator struct {
 
 	mu      sync.Mutex
 	swarms  map[string]*swarm.Swarm
+	pending map[string]bool
 	results map[string]*solver.Result
 	solved  map[string]bool
 	ctx     context.Context
@@ -61,6 +62,7 @@ func NewWithOptionsAndTracker(challengesDir string, modelSpecs []string, apiKeys
 		skillsDir:     skillsDir,
 		costs:         costs,
 		swarms:        make(map[string]*swarm.Swarm),
+		pending:       make(map[string]bool),
 		results:       make(map[string]*solver.Result),
 		solved:        make(map[string]bool),
 	}
@@ -196,6 +198,15 @@ func (c *Coordinator) Spawn(ctx context.Context, challenge string) bool {
 		c.mu.Unlock()
 		return false
 	}
+	if c.pending[challenge] {
+		c.mu.Unlock()
+		return false
+	}
+	if c.maxConcurrent > 0 && c.activeCountLocked() >= c.maxConcurrent {
+		c.mu.Unlock()
+		return false
+	}
+	c.pending[challenge] = true
 	c.mu.Unlock()
 
 	go func() {
@@ -210,10 +221,21 @@ func (c *Coordinator) recordResult(challenge string, result *solver.Result) {
 	defer c.mu.Unlock()
 
 	c.results[challenge] = result
+	delete(c.pending, challenge)
 	delete(c.swarms, challenge)
 	if result != nil && result.Status == solver.FlagFound {
 		c.solved[challenge] = true
 	}
+}
+
+func (c *Coordinator) activeCountLocked() int {
+	active := len(c.swarms)
+	for name := range c.pending {
+		if c.swarms[name] == nil {
+			active++
+		}
+	}
+	return active
 }
 
 func initialStrategy(meta *prompt.Meta) string {

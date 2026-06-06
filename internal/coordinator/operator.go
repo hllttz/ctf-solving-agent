@@ -349,7 +349,7 @@ func (c *Coordinator) handleOperatorSpawn(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !c.Spawn(nil, challenge) {
-		http.Error(w, "challenge already running or invalid", http.StatusConflict)
+		http.Error(w, "challenge already running, at capacity, or invalid", http.StatusConflict)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "challenge": challenge})
