@@ -12,22 +12,34 @@ Binary / pwn
 - gdb, gdbserver, strace, ltrace, patchelf
 - pwntools, ROPgadget, one_gadget, angr, capstone, unicorn, keystone
 - radare2/r2 for disassembly and reversing
+- pwndbg is loaded by default in gdb
+- seccomp-tools for seccomp filters, ropper for gadget search
+- qemu-user/qemu-user-static for cross-architecture Linux binaries
 
 Reverse engineering
-- strings, xxd, objdump, r2, gdb
+- strings, xxd, objdump, llvm-objdump, llvm-readobj, r2, gdb
 - pyghidra is available from Python
+- upx for packed binaries
 - decompyle3 and uncompyle6 for Python bytecode
+- PE/PYD static analysis: pefile, lief, r2pipe, flare-floss, vivisect
+- Windows/PYD support: wine64, mingw-w64, cabextract
+- Android: apktool and jadx for APK/Dalvik analysis
+- For .pyd files, start with file, strings/floss, objdump/r2 exports, then locate PyInit_*, PyMethodDef tables, PyArg_Parse* calls, Cython string/constants, or pybind11 wrappers.
+- Dynamic .pyd loading may require matching Windows Python DLLs under wine; if import fails, fall back to static PE analysis and CPython API call tracing in disassembly.
 
 Crypto
 - python3 with pycryptodome, z3-solver, gmpy2, sympy, numpy, scipy
 - sage for finite fields, elliptic curves, polynomial rings, lattices, LLL, and Coppersmith-style attacks
+- fplll tools and pari-gp for lattice/number theory work
 - openssl, hashcat, john
 
 Forensics / stego
 - binwalk, exiftool, foremost, sleuthkit tools, tshark, tcpdump
 - steghide, zsteg, ImageMagick, tesseract OCR
+- pngcheck, jpeginfo, qpdf, poppler-utils, yara
 - ffmpeg and sox for audio/video
 
 Web
 - curl, Python requests, BeautifulSoup, lxml, flask, nmap
+- sqlmap for SQL injection testing; ffuf for content discovery; httpie for request debugging
 - Use curl or Python scripts for cookies, sessions, redirects, and fuzzing

@@ -2,14 +2,19 @@ FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     MAMBA_ROOT_PREFIX=/opt/micromamba \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     PIP_BREAK_SYSTEM_PACKAGES=1 \
+    UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     PATH="/opt/micromamba/bin:/root/.local/bin:/usr/local/bin:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git file unzip zip p7zip-full xz-utils tar gzip bzip2 \
     build-essential make cmake pkg-config patchelf strace ltrace socat netcat-openbsd nmap \
     gdb gdbserver binutils elfutils radare2 python3 python3-pip python3-venv python3-dev \
-    ruby ruby-dev default-jre-headless \
+    mingw-w64 wine64 cabextract ruby ruby-dev default-jre-headless \
+    upx-ucl llvm sqlmap ffuf httpie fplll-tools pari-gp \
+    pngcheck jpeginfo qpdf poppler-utils yara qemu-user qemu-user-static apktool \
     binwalk exiftool imagemagick ffmpeg sox tesseract-ocr \
     tshark tcpdump sleuthkit foremost steghide john hashcat \
     libssl-dev libffi-dev libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev \
@@ -25,10 +30,26 @@ RUN python3 -m pip install --no-cache-dir \
     pwntools ropgadget one_gadget angr z3-solver pycryptodome gmpy2 sympy numpy scipy \
     pillow opencv-python-headless requests beautifulsoup4 lxml flask pyghidra \
     capstone unicorn keystone-engine construct scapy volatility3 \
-    decompyle3 uncompyle6 python-magic
+    decompyle3 uncompyle6 python-magic pefile lief r2pipe flare-floss vivisect \
+    pypykatz oletools ropper
 
-RUN gem install --no-document zsteg
+RUN gem install --no-document zsteg seccomp-tools
 
+RUN python3 -m pip install --no-cache-dir uv
+
+RUN git clone --depth=1 https://github.com/pwndbg/pwndbg /opt/pwndbg && \
+    cd /opt/pwndbg && ./setup.sh && \
+    printf 'source /opt/pwndbg/gdbinit.py\n' > /root/.gdbinit
+
+RUN mkdir -p /opt/jadx && \
+    curl -L --retry 5 --retry-delay 3 --connect-timeout 30 \
+      -o /tmp/jadx.zip \
+      https://github.com/skylot/jadx/releases/download/v1.5.2/jadx-1.5.2.zip && \
+    unzip -q /tmp/jadx.zip -d /opt/jadx && \
+    chmod +x /opt/jadx/bin/jadx /opt/jadx/bin/jadx-gui && \
+    ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx && \
+    ln -sf /opt/jadx/bin/jadx-gui /usr/local/bin/jadx-gui && \
+    rm -f /tmp/jadx.zip
 COPY sandbox/sandbox-tools.txt /tools.txt
 
 WORKDIR /workspace
