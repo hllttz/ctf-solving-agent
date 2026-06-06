@@ -111,6 +111,13 @@ func (c *Coordinator) SolveAll(ctx context.Context) map[string]*solver.Result {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			c.mu.Lock()
+			if !c.reserveChallengeLocked(challenge) {
+				c.mu.Unlock()
+				return
+			}
+			c.mu.Unlock()
+
 			result := c.solveOne(ctx, challenge)
 			c.recordResult(challenge, result)
 		}(ch)
@@ -194,25 +201,33 @@ func (c *Coordinator) Spawn(ctx context.Context, challenge string) bool {
 		return false
 	}
 	c.mu.Lock()
-	if sw := c.swarms[challenge]; sw != nil {
+	if !c.reserveChallengeLocked(challenge) {
 		c.mu.Unlock()
 		return false
 	}
-	if c.pending[challenge] {
-		c.mu.Unlock()
-		return false
-	}
-	if c.maxConcurrent > 0 && c.activeCountLocked() >= c.maxConcurrent {
-		c.mu.Unlock()
-		return false
-	}
-	c.pending[challenge] = true
 	c.mu.Unlock()
 
 	go func() {
 		result := c.solveOne(ctx, challenge)
 		c.recordResult(challenge, result)
 	}()
+	return true
+}
+
+func (c *Coordinator) reserveChallengeLocked(challenge string) bool {
+	if strings.TrimSpace(challenge) == "" {
+		return false
+	}
+	if sw := c.swarms[challenge]; sw != nil {
+		return false
+	}
+	if c.pending[challenge] {
+		return false
+	}
+	if c.maxConcurrent > 0 && c.activeCountLocked() >= c.maxConcurrent {
+		return false
+	}
+	c.pending[challenge] = true
 	return true
 }
 

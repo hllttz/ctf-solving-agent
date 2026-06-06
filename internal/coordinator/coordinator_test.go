@@ -77,3 +77,31 @@ func TestRecordResultReleasesSpawnCapacity(t *testing.T) {
 		t.Fatalf("active count = %d", got)
 	}
 }
+
+func TestReserveChallengeRejectsDuplicateAndCapacity(t *testing.T) {
+	coord := New(t.TempDir(), []string{"anthropic/test"}, nil, "ctf-sandbox", 1)
+
+	if !coord.reserveChallengeLocked("baby") {
+		t.Fatalf("reserve first challenge returned false")
+	}
+	if coord.reserveChallengeLocked("baby") {
+		t.Fatalf("reserve duplicate challenge returned true")
+	}
+	if coord.reserveChallengeLocked("next") {
+		t.Fatalf("reserve exceeded capacity")
+	}
+
+	coord.recordResult("baby", &solver.Result{Status: solver.GaveUp})
+	if !coord.reserveChallengeLocked("next") {
+		t.Fatalf("reserve after capacity release returned false")
+	}
+}
+
+func TestReserveChallengeRejectsActiveSwarm(t *testing.T) {
+	coord := New(t.TempDir(), []string{"anthropic/test"}, nil, "ctf-sandbox", 2)
+	coord.swarms["baby"] = swarm.New("baby", t.TempDir(), nil, nil, "ctf-sandbox")
+
+	if coord.reserveChallengeLocked("baby") {
+		t.Fatalf("reserved challenge with active swarm")
+	}
+}
