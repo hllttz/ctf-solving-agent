@@ -57,6 +57,7 @@ name: chall-name
 category: pwn        # web / pwn / rev / crypto / forensics / misc
 description: ...
 value: 500
+solves: 17
 connection_info: nc host 31337
 tags:
   - heap

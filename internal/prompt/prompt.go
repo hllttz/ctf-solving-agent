@@ -16,6 +16,7 @@ type Meta struct {
 	Points         int      `yaml:"points"`
 	Value          int      `yaml:"value"`
 	Tags           []string `yaml:"tags"`
+	Solves         int      `yaml:"solves"`
 	Arch           string   `yaml:"arch"`
 	Host           string   `yaml:"host"`
 	Port           int      `yaml:"port"`
@@ -68,6 +69,9 @@ func Build(meta *Meta, distfilesPath, workspacePath string) string {
 	}
 	if len(meta.Tags) > 0 {
 		b.WriteString(fmt.Sprintf("Tags: %s\n", strings.Join(meta.Tags, ", ")))
+	}
+	if meta.Solves > 0 {
+		b.WriteString(fmt.Sprintf("Solves: %d\n", meta.Solves))
 	}
 	if meta.Arch != "" {
 		b.WriteString(fmt.Sprintf("Architecture: %s\n", meta.Arch))
