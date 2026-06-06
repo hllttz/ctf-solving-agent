@@ -42,6 +42,12 @@ func TestBuildDiscoversDistfilesWhenMetadataOmitsFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dist, "photo.png"), []byte("png"), 0644); err != nil {
 		t.Fatalf("write image: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dist, "scan.webp"), []byte("webp"), 0644); err != nil {
+		t.Fatalf("write webp image: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dist, "page.tiff"), []byte("tiff"), 0644); err != nil {
+		t.Fatalf("write tiff image: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(dist, "solver.elf"), []byte("elf"), 0644); err != nil {
 		t.Fatalf("write binary: %v", err)
 	}
@@ -53,6 +59,8 @@ func TestBuildDiscoversDistfilesWhenMetadataOmitsFiles(t *testing.T) {
 	for _, want := range []string{
 		"- photo.png",
 		"Hint: Image file - use view_image to inspect",
+		"- scan.webp",
+		"- page.tiff",
 		"- solver.elf",
 		"## Image Guidance",
 		"## Binary Analysis Tools",

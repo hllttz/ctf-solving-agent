@@ -22,7 +22,7 @@ func NewViewImageTool(sb sandbox.Sandbox) *ViewImageTool { return &ViewImageTool
 func (t *ViewImageTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "view_image",
-		Desc: "Read an image file from the sandbox. Works with PNG, JPG, GIF, BMP. " +
+		Desc: "Read an image file from the sandbox. Works with PNG, JPG, GIF, BMP, WebP, TIFF. " +
 			"Use this to view screenshots, QR codes, stego images, etc.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"path": {Type: schema.String, Desc: "Path to the image file", Required: true},
@@ -49,7 +49,7 @@ func (t *ViewImageTool) InvokableRun(_ context.Context, argsJSON string, _ ...to
 
 	mime := detectImageMime(data)
 	if mime == "" {
-		return fmt.Sprintf("view_image could not recognize %q as PNG/JPEG/GIF/BMP/WebP (%d bytes).\nUse bash tools such as file, xxd, pngcheck, identify, binwalk, foremost, or Python to inspect magic bytes and repair the image before retrying.", path, len(data)), nil
+		return fmt.Sprintf("view_image could not recognize %q as PNG/JPEG/GIF/BMP/WebP/TIFF (%d bytes).\nUse bash tools such as file, xxd, pngcheck, identify, binwalk, foremost, or Python to inspect magic bytes and repair the image before retrying.", path, len(data)), nil
 	}
 
 	return fmt.Sprintf(`Image loaded: %s
@@ -124,6 +124,13 @@ func detectImageMime(data []byte) string {
 	if len(data) >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
 		data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
 		return "image/webp"
+	}
+	// TIFF
+	if data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00 {
+		return "image/tiff"
+	}
+	if data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A {
+		return "image/tiff"
 	}
 	return ""
 }

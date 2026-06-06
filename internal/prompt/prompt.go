@@ -219,9 +219,7 @@ func rewriteLocalhost(s string) string {
 func fileHint(filename string) string {
 	lower := strings.ToLower(filename)
 	switch {
-	case strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") ||
-		strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") ||
-		strings.HasSuffix(lower, ".bmp"):
+	case isImageFile(lower):
 		return "Image file - use view_image to inspect"
 	case strings.HasSuffix(lower, ".txt") || strings.HasSuffix(lower, ".md"):
 		return "Text file - use read_file to inspect"
@@ -303,15 +301,19 @@ func generalAnalysisGuidance(meta *Meta, files []string) string {
 
 func hasImage(files []string) bool {
 	for _, name := range files {
-		lower := strings.ToLower(name)
-		if strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") ||
-			strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") ||
-			strings.HasSuffix(lower, ".bmp") || strings.HasSuffix(lower, ".webp") ||
-			strings.HasSuffix(lower, ".tiff") || strings.HasSuffix(lower, ".tif") {
+		if isImageFile(name) {
 			return true
 		}
 	}
 	return false
+}
+
+func isImageFile(filename string) bool {
+	lower := strings.ToLower(filename)
+	return strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") ||
+		strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") ||
+		strings.HasSuffix(lower, ".bmp") || strings.HasSuffix(lower, ".webp") ||
+		strings.HasSuffix(lower, ".tiff") || strings.HasSuffix(lower, ".tif")
 }
 
 func shouldIncludeBinaryGuidance(meta *Meta, files []string) bool {
